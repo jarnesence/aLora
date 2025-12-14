@@ -99,8 +99,9 @@ Two UI backends are planned:
 
 The UI is intentionally small:
 
-* **Chats** (DM list + history)
-* **Status** (airtime, TX/RX, queue depth, route/health)
+* **Stats** (radio health, airtime, and latest message preview)
+* **Contacts** (paired and recently seen peers)
+* **Send** (direct message composition and shortcuts)
 * **Settings** (radio profile, UI options, identity)
 
 Input is primarily via **rotary encoder**, optimized for fast text composition.

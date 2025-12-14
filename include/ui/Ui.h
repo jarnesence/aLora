@@ -18,7 +18,7 @@ public:
   void onIncoming(uint16_t src, const WireChatPacket& pkt);
 
 private:
-  enum class Screen : uint8_t { Chat=0, Contacts=1, Compose=2, Status=3, Settings=4 };
+  enum class Screen : uint8_t { Status=0, Contacts=1, Compose=2, Settings=3 };
   enum class ComposeFocus : uint8_t {
     Destination=0,
     Contact=1,
@@ -47,12 +47,9 @@ private:
   static constexpr size_t kMaxPending = 4;
   PendingSend _pending[kMaxPending];
 
-  Screen _screen = Screen::Chat;
+  Screen _screen = Screen::Status;
   uint32_t _lastDrawMs = 0;
   uint32_t _lastPresenceMs = 0;
-
-  // Chat scroll
-  int32_t _chatScroll = 0;
 
   // Compose state
   uint16_t _dst = 1;
@@ -64,11 +61,12 @@ private:
   uint8_t _shortcutIdx = 0;
   uint32_t _nextMsgId = 1;
 
-  void drawChat();
   void drawContacts();
   void drawCompose();
   void drawStatus();
   void drawSettings();
+
+  const ChatMsg* latestMessage(uint16_t filter) const;
 
   void sendAck(uint16_t dst, uint32_t refMsgId);
 
@@ -108,31 +106,29 @@ private:
     bool paired = false;
   };
 
-  static constexpr size_t kMaxSeenPeers = 8;
-  SeenPeer _seen[kMaxSeenPeers]{};
-  uint16_t _chatPeerFilter = 0;  // 0 = all
-  uint8_t _contactScroll = 0;
+    static constexpr size_t kMaxSeenPeers = 8;
+    SeenPeer _seen[kMaxSeenPeers]{};
+    uint16_t _chatPeerFilter = 0;  // 0 = all
+    uint8_t _contactScroll = 0;
 
-  void recordSeenPeer(uint16_t addr, bool paired);
-  size_t contactCount() const;
-  size_t contactListLength() const;
-  bool contactAt(size_t idx, SeenPeer& out) const;  // idx=0 is "All"
-  bool matchesChatFilter(const ChatMsg& m) const;
-  size_t filteredChatCount() const;
+    void recordSeenPeer(uint16_t addr, bool paired);
+    size_t contactCount() const;
+    size_t contactListLength() const;
+    bool contactAt(size_t idx, SeenPeer& out) const;  // idx=0 is "All"
 
-  struct RouteHealth {
-    bool active = false;
-    uint16_t dst = 0;
-    uint8_t successStreak = 0;
-    uint32_t lastAckMs = 0;
-    uint32_t lastDiscoveryMs = 0;
-  };
+    struct RouteHealth {
+      bool active = false;
+      uint16_t dst = 0;
+      uint8_t successStreak = 0;
+      uint32_t lastAckMs = 0;
+      uint32_t lastDiscoveryMs = 0;
+    };
 
-  static constexpr size_t kMaxRoutes = 6;
-  RouteHealth _routes[kMaxRoutes]{};
+    static constexpr size_t kMaxRoutes = 6;
+    RouteHealth _routes[kMaxRoutes]{};
 
-  void noteDeliverySuccess(uint16_t dst);
-  bool routeIsStale(uint16_t dst, uint32_t now) const;
-  RouteHealth* routeFor(uint16_t dst);
-  const RouteHealth* routeFor(uint16_t dst) const;
+    void noteDeliverySuccess(uint16_t dst);
+    bool routeIsStale(uint16_t dst, uint32_t now) const;
+    RouteHealth* routeFor(uint16_t dst);
+    const RouteHealth* routeFor(uint16_t dst) const;
 };
