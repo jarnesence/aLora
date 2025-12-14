@@ -175,6 +175,7 @@ void Ui::recordPending(const WireChatPacket& pkt) {
     slot.dst = pkt.to;
     slot.attempts = 1;
     slot.lastSendMs = millis();
+    slot.nextSendMs = slot.lastSendMs + computeRetryDelayMs(slot.attempts);
     slot.pkt = pkt;
     return;
   }
@@ -194,7 +195,6 @@ void Ui::updateReliability() {
   if (!_radio) return;
 
   const uint32_t now = millis();
-  const uint32_t retryDelayMs = 4000;
   const uint8_t maxAttempts = 3;
 
   for (size_t i = 0; i < kMaxPending; i++) {
@@ -202,16 +202,28 @@ void Ui::updateReliability() {
     if (!slot.active) continue;
 
     if (slot.attempts >= maxAttempts) {
-      slot.active = false;
+      if (now >= slot.nextSendMs) {
+        slot.active = false;
+        if (_log) _log->markFailed(slot.pkt.msgId);
+      }
       continue;
     }
 
-    if (now - slot.lastSendMs < retryDelayMs) continue;
+    if (now < slot.nextSendMs) continue;
 
     _radio->sendDm(slot.dst, slot.pkt);
     slot.attempts++;
     slot.lastSendMs = now;
+    slot.nextSendMs = now + computeRetryDelayMs(slot.attempts);
   }
+}
+
+uint32_t Ui::computeRetryDelayMs(uint8_t attempt) const {
+  const uint32_t baseDelayMs = 2500;
+  const uint32_t jitterWindowMs = 600;
+  uint32_t jitterSeed = (uint32_t)millis();
+  uint32_t jitter = jitterSeed % jitterWindowMs;
+  return (baseDelayMs * (uint32_t)attempt) + jitter;
 }
 
 void Ui::sendAck(uint16_t dst, uint32_t refMsgId) {
@@ -272,7 +284,8 @@ void Ui::drawChat() {
 
     const char* state = "";
     if (m.outgoing) {
-      state = m.delivered ? "✓" : "…";
+      if (m.failed) state = "!";
+      else state = m.delivered ? "✓" : "…";
     }
 
     char header[18];

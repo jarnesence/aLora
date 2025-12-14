@@ -1,6 +1,6 @@
 # aLora — Private, Infrastructure-Independent Messaging over LoRa Mesh
 
-> **Status:** Early prototype, now with interactive compose/send, on-device deduplication, OLED bring-up hardening, and bounded DM resend + duplicate ACK handling for better reliability. Core security work continues.
+> **Status:** Early prototype, now with interactive compose/send, on-device deduplication, OLED bring-up hardening, jittered backoff on DM retries, failure indicators in chat, and duplicate ACK handling for better reliability. Core security work continues.
 
 ## AI authoring note
 
@@ -113,7 +113,7 @@ This repository is in a **prototype stabilization phase**. Latest highlights:
 * Rotary input integrated for menu navigation and text editing.
 * Compose view can now **set destination, move the cursor, edit characters, and send** DMs directly over the mesh.
 * Incoming packets are **deduplicated on-device** before reaching the UI/log.
-* One-hop delivery receipts are **acknowledged and reflected in the chat list** (checkmark when delivered), and outgoing DMs auto-retry with bounded resends if no receipt arrives.
+* One-hop delivery receipts are **acknowledged and reflected in the chat list** (checkmark when delivered), and outgoing DMs auto-retry with **bounded, jittered backoff**; exhausted retries now flag failed messages in the chat list.
 * Basic message persistence (chat tail/history concept).
 
 ## Known gaps / next steps
@@ -157,7 +157,7 @@ This keeps the firmware lightweight while remaining adaptable.
 **Goal:** DM messaging feels dependable.
 
 * [x] Delivery receipts (ACK) with bounded retries.
-* [ ] Retry policy (bounded, airtime-aware and jittered).
+* [x] Retry policy (bounded, jittered backoff plus on-screen failure indication).
 * [ ] Failure escalation: broadcast discovery only when necessary.
 * [ ] Status page: airtime + health metrics.
 

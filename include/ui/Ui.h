@@ -30,6 +30,7 @@ private:
     uint16_t dst = 0;
     uint8_t attempts = 0;
     uint32_t lastSendMs = 0;
+    uint32_t nextSendMs = 0;
     WireChatPacket pkt{};
   };
 
@@ -68,4 +69,5 @@ private:
   void recordPending(const WireChatPacket& pkt);
   void updateReliability();
   void clearPending(uint32_t msgId);
+  uint32_t computeRetryDelayMs(uint8_t attempt) const;
 };
