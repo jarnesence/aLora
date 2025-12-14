@@ -15,11 +15,24 @@ void Ui::begin() {
 }
 
 void Ui::onIncoming(uint16_t src, const WireChatPacket& pkt) {
+  uint16_t me = _radio ? _radio->localAddress() : 0;
+
   if (pkt.kind == PacketKind::Ack) {
+    if (pkt.to != me) return;
     if (_log) _log->markDelivered(pkt.refMsgId);
     clearPending(pkt.refMsgId);
     return;
   }
+
+  if (pkt.kind == PacketKind::Discovery) {
+    if (pkt.to != me && pkt.to != 0xFFFF) return;
+    if (_radio) {
+      sendAck(src, pkt.refMsgId);
+    }
+    return;
+  }
+
+  if (pkt.to != me && pkt.to != 0xFFFF) return;
 
   if (_log) _log->add(src, false, pkt.msgId, pkt.text, (uint32_t)(millis()/1000));
 
@@ -174,6 +187,7 @@ void Ui::recordPending(const WireChatPacket& pkt) {
     slot.active = true;
     slot.dst = pkt.to;
     slot.attempts = 1;
+    slot.discoverySent = false;
     slot.lastSendMs = millis();
     slot.nextSendMs = slot.lastSendMs + computeRetryDelayMs(slot.attempts);
     slot.pkt = pkt;
@@ -195,13 +209,23 @@ void Ui::updateReliability() {
   if (!_radio) return;
 
   const uint32_t now = millis();
-  const uint8_t maxAttempts = 3;
+  const uint8_t maxUnicastAttempts = 3;
+  const uint8_t maxTotalAttempts = 5;
+  const uint32_t discoveryCooldownMs = 5000;
 
   for (size_t i = 0; i < kMaxPending; i++) {
     PendingSend& slot = _pending[i];
     if (!slot.active) continue;
 
-    if (slot.attempts >= maxAttempts) {
+    if (slot.attempts >= maxUnicastAttempts && !slot.discoverySent) {
+      if (now >= slot.nextSendMs) {
+        escalateDiscovery(slot, now);
+        slot.nextSendMs = now + discoveryCooldownMs;
+      }
+      continue;
+    }
+
+    if (slot.attempts >= maxTotalAttempts) {
       if (now >= slot.nextSendMs) {
         slot.active = false;
         if (_log) _log->markFailed(slot.pkt.msgId);
@@ -216,6 +240,13 @@ void Ui::updateReliability() {
     slot.lastSendMs = now;
     slot.nextSendMs = now + computeRetryDelayMs(slot.attempts);
   }
+}
+
+void Ui::escalateDiscovery(PendingSend& slot, uint32_t now) {
+  if (!_radio) return;
+  _radio->sendDiscovery(slot.dst, slot.pkt.msgId);
+  slot.discoverySent = true;
+  slot.lastSendMs = now;
 }
 
 uint32_t Ui::computeRetryDelayMs(uint8_t attempt) const {
@@ -359,11 +390,17 @@ void Ui::drawStatus() {
   snprintf(line, sizeof(line), "TX:%lu", (unsigned long)_radio->txCount());
   _d->drawStr(2, 42, line);
 
-  snprintf(line, sizeof(line), "Uptime:%lus", (unsigned long)(millis()/1000));
+  snprintf(line, sizeof(line), "Air:%lums", (unsigned long)_radio->txAirtimeMs());
   _d->drawStr(2, 54, line);
 
-  _d->drawStr(2, 70, "OLED should show now.");
-  _d->drawStr(2, 82, "If blank: try 0x3C/0x3D.");
+  snprintf(line, sizeof(line), "Pend:%u", (unsigned)pendingCount());
+  _d->drawStr(2, 66, line);
+
+  snprintf(line, sizeof(line), "Uptime:%lus", (unsigned long)(millis()/1000));
+  _d->drawStr(2, 78, line);
+
+  _d->drawStr(2, 94, "Retries:bounded+discover");
+  _d->drawStr(2, 106, "Broadcast only on fail.");
 }
 
 void Ui::drawSettings() {
@@ -390,4 +427,12 @@ void Ui::drawSettings() {
   _d->drawStr(2, 66, line);
 
   _d->drawStr(2, 84, "Later: edit via rotary.");
+}
+
+size_t Ui::pendingCount() const {
+  size_t n = 0;
+  for (size_t i = 0; i < kMaxPending; i++) {
+    if (_pending[i].active) n++;
+  }
+  return n;
 }

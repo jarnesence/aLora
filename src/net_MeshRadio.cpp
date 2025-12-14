@@ -1,6 +1,7 @@
 #include "net/MeshRadio.h"
 
 #include <Arduino.h>
+#include <math.h>
 #include <SPI.h>
 #include <LoraMesher.h>
 
@@ -63,6 +64,28 @@ void MeshRadio::sendAck(uint16_t dst, uint32_t refMsgId) {
   ack.refMsgId = refMsgId;
   ack.text[0] = '\0';
   sendDm(dst, ack);
+}
+
+bool MeshRadio::sendDiscovery(uint16_t target, uint32_t refMsgId) {
+  LoraMesher& radio = LoraMesher::getInstance();
+
+  (void)refMsgId; // Reserved for future ref-based probes.
+
+  WireChatPacket probe{};
+  probe.kind = PacketKind::Discovery;
+  probe.msgId = ++_msgSeq;
+  probe.to = target;
+  probe.from = localAddress();
+  probe.ts = (uint32_t)(millis() / 1000);
+  probe.refMsgId = 0;
+  probe.text[0] = '\0';
+
+  // Broadcast to refresh paths while keeping the intended destination in the packet.
+  const uint16_t kBroadcastAddr = 0xFFFF;
+  radio.sendReliable(kBroadcastAddr, &probe, 1);
+  _txCount++;
+  _txAirtimeMs += estimateTimeOnAirMs(sizeof(WireChatPacket));
+  return true;
 }
 
 bool MeshRadio::begin() {
@@ -140,7 +163,7 @@ bool MeshRadio::sendDm(uint16_t dst, const WireChatPacket& pkt) {
 
   // Avoid template instantiation with T=void by passing a typed pointer.
   WireChatPacket tmp = pkt;
-  if (tmp.kind != PacketKind::Ack && tmp.kind != PacketKind::Chat) {
+  if (tmp.kind != PacketKind::Ack && tmp.kind != PacketKind::Chat && tmp.kind != PacketKind::Discovery) {
     tmp.kind = PacketKind::Chat;
   }
   tmp.to = dst;
@@ -149,9 +172,35 @@ bool MeshRadio::sendDm(uint16_t dst, const WireChatPacket& pkt) {
   radio.sendReliable(dst, &tmp, 1);
 
   _txCount++;
+  _txAirtimeMs += estimateTimeOnAirMs(sizeof(WireChatPacket));
   return true;
 }
 
 uint16_t MeshRadio::localAddress() const {
   return LoraMesher::getInstance().getLocalAddress();
+}
+
+uint32_t MeshRadio::estimateTimeOnAirMs(size_t payloadBytes) const {
+  // LoRa airtime (approximate): Tsym = 2^SF / BW. Payload symbols are calculated with SF, CR=4/5, and DE for SF >= 11.
+  // This keeps timing deterministic and avoids dynamic allocation.
+  const float bwHz = ((float)APP_LORA_BW_KHZ) * 1000.0f;
+  const int sf = (int)APP_LORA_SF;
+  const bool lowDataRateOpt = (bwHz <= 62500.0f) && (sf >= 11);
+  const int cr = 1; // Coding rate denominator offset (4/5)
+
+  const float tsymMs = (float)(1UL << sf) / bwHz * 1000.0f;
+
+  const int headerEnabled = 1;
+  const int de = lowDataRateOpt ? 1 : 0;
+  const int payloadSym = 8 + (int)ceilf(
+    (float)(8 * (int)payloadBytes - 4 * sf + 28 + 16 - 20 * headerEnabled) /
+    (float)(4 * (sf - 2 * de))
+  ) * (cr + 4);
+
+  const int preambleSym = APP_LORA_PREAMBLE + 4.25f;
+  float tPayloadMs = tsymMs * (float)payloadSym;
+  float tPreambleMs = tsymMs * (float)preambleSym;
+
+  uint32_t totalMs = (uint32_t)(tPayloadMs + tPreambleMs);
+  return totalMs > 0 ? totalMs : 1;
 }
