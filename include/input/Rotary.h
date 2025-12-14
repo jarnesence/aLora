@@ -11,8 +11,12 @@ public:
 
   // Button edge events
   bool wasClicked();
+  bool wasHeld();
 
 private:
   int32_t _delta = 0;
   bool _clicked = false;
+  bool _held = false;
+  bool _btnDown = false;
+  uint32_t _downSinceMs = 0;
 };

@@ -112,8 +112,9 @@ This repository is in a **prototype stabilization phase**. Latest highlights:
 
 * OLED bring-up hardened (auto I2C address detection, controller selection, boot diagnostics).
 * Rotary input integrated for menu navigation and text editing.
-* Compose view can now **set destination, move the cursor, edit characters, and send** DMs directly over the mesh.
+* Compose view now uses a **canned-message picker** (Meshtastic-style, portrait) for rapid DM sends.
 * Incoming packets are **deduplicated on-device** before reaching the UI/log.
+* Pairing flows have moved into **Contacts → New**, offering broadcast/listen roles, PIN confirmation, and a "forget" action on long-press.
 * One-hop delivery receipts are **acknowledged and reflected in the chat list** (checkmark when delivered), and outgoing DMs auto-retry with **bounded, jittered backoff**; exhausted retries now flag failed messages in the chat list.
 * Basic message persistence (chat tail/history concept).
 * **Reliability escalation** now performs a controlled broadcast discovery probe after failed unicasts, then resumes bounded retries.

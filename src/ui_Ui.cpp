@@ -4,42 +4,24 @@
 #include "ui/Ui.h"
 #include "util/Crypto.h"
 
-static const char* kCharset = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?-_/@";
-static const uint8_t kGroupStarts[] = {0, 1, 27, 37};
 static const char* kShortcuts[] = {"OK", "ACK", "OMW", "PING?", "HERE"};
 static constexpr size_t kShortcutCount = sizeof(kShortcuts) / sizeof(kShortcuts[0]);
 
 Ui::Ui(IDisplay* display, RotaryInput* input, MeshRadio* radio, ChatLog* log, PairingStore* pairs)
 : _d(display), _in(input), _radio(radio), _log(log), _pairs(pairs) {}
 
-static uint8_t findGroupBoundary(uint8_t current, bool forward) {
-  size_t groups = sizeof(kGroupStarts) / sizeof(kGroupStarts[0]);
-  if (forward) {
-    for (size_t i = 0; i < groups; i++) {
-      if (kGroupStarts[i] > current) return kGroupStarts[i];
-    }
-    return kGroupStarts[0];
-  }
-
-  // backward search
-  uint8_t best = kGroupStarts[groups - 1];
-  for (size_t i = 0; i < groups; i++) {
-    if (kGroupStarts[i] < current) best = kGroupStarts[i];
-  }
-  return best;
-}
-
 void Ui::begin() {
   _lastDrawMs = 0;
-  _screen = Screen::Splash;
-  _splashStartMs = millis();
+  _screen = Screen::Menu;
   _menuIndex = 0;
   _radioField = 0;
   _pairingOption = 0;
   _pairingSelection = 0;
+  _actionSelection = 0;
   _beaconActive = false;
+  _listeningForPairs = false;
   resetCodeDigits();
-  syncCharIndexToDraft();
+  _focus = ComposeFocus::Contact;
 }
 
 void Ui::onIncoming(uint16_t src, const WireChatPacket& pkt) {
@@ -88,30 +70,33 @@ void Ui::handleInput() {
   _in->tick();
 
   bool click = _in->wasClicked();
+  bool held = _in->wasHeld();
   int32_t delta = _in->readDelta();
 
   if (click) handleClick();
+  if (held) handleHold();
   if (delta != 0) handleDelta(delta);
 }
 
 void Ui::handleClick() {
   switch (_screen) {
-    case Screen::Splash:
-      _screen = Screen::Menu;
-      return;
     case Screen::Menu:
       switch (_menuIndex % 4) {
         case 0: _screen = Screen::Contacts; return;
-        case 1: _screen = Screen::Compose; _focus = ComposeFocus::Cursor; return;
+        case 1: _screen = Screen::Compose; _focus = ComposeFocus::Contact; return;
         case 2: _screen = Screen::Radio; return;
-        case 3: _screen = Screen::Pairing; return;
+        case 3: _screen = Screen::Status; return;
         default: break;
       }
       return;
     case Screen::Contacts:
       selectContactTarget();
-      _screen = Screen::Compose;
-      _focus = ComposeFocus::Cursor;
+      if (_pairCandidate == UINT16_MAX) {
+        _screen = Screen::PairMode;
+      } else {
+        _screen = Screen::Compose;
+        _focus = ComposeFocus::Shortcut;
+      }
       return;
     case Screen::Compose:
       handleComposeClick();
@@ -123,27 +108,38 @@ void Ui::handleClick() {
         _screen = Screen::Menu;
       }
       return;
-    case Screen::Pairing:
+    case Screen::PairMode:
       if ((_pairingOption % 2) == 0) {
         _beaconActive = true;
         _beaconStartMs = millis();
-        _screen = Screen::Beacon;
+        _lastBeaconSendMs = 0;
+        _screen = Screen::Broadcast;
       } else {
-        _screen = Screen::AddPerson;
+        _listeningForPairs = true;
         _pairingSelection = 0;
+        for (size_t i = 0; i < kMaxBeacons; i++) {
+          _beacons[i].active = false;
+        }
+        _screen = Screen::Listen;
       }
       return;
-    case Screen::Beacon:
+    case Screen::Broadcast:
       _beaconActive = false;
-      _screen = Screen::Pairing;
+      _screen = Screen::Contacts;
       return;
-    case Screen::AddPerson: {
-      SeenPeer peer{};
-      if (contactAt((size_t)_pairingSelection + 1, peer) && peer.addr != 0) {
-        _pairCandidate = peer.addr;
+    case Screen::Listen: {
+      PairBeacon found{};
+      if (beaconAt(_pairingSelection, found)) {
+        _pairCandidate = found.addr;
+        _pendingReqNonce = nextNonce();
+        _pendingReqMsgId = _nextMsgId;
+        sendPairRequest(found.addr);
         resetCodeDigits();
         _codeCursor = 0;
         _screen = Screen::CodeEntry;
+      } else {
+        _listeningForPairs = false;
+        _screen = Screen::Contacts;
       }
       return;
     }
@@ -154,16 +150,48 @@ void Ui::handleClick() {
         confirmCodeEntry();
       }
       return;
+    case Screen::ContactActions:
+      if (_actionTarget != 0) {
+        if (_actionSelection == 0) {
+          _dst = _actionTarget;
+          _screen = Screen::Compose;
+          _focus = ComposeFocus::Shortcut;
+        } else {
+          for (size_t i = 0; i < kMaxSeenPeers; i++) {
+            if (_seen[i].active && _seen[i].addr == _actionTarget) {
+              _seen[i].active = false;
+            }
+          }
+          _screen = Screen::Contacts;
+        }
+      } else {
+        _screen = Screen::Contacts;
+      }
+      return;
     default:
       _screen = Screen::Menu;
       return;
   }
 }
 
+void Ui::handleHold() {
+  switch (_screen) {
+    case Screen::Contacts: {
+      SeenPeer peer{};
+      if (contactAt(_contactSelection, peer) && peer.addr != 0 && !peer.isNew) {
+        _actionTarget = peer.addr;
+        _actionSelection = 0;
+        _screen = Screen::ContactActions;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 void Ui::handleDelta(int32_t delta) {
   switch (_screen) {
-    case Screen::Splash:
-      break;
     case Screen::Menu: {
       int32_t next = (int32_t)_menuIndex + (delta > 0 ? 1 : -1);
       if (next < 0) next = 0;
@@ -187,21 +215,27 @@ void Ui::handleDelta(int32_t delta) {
     case Screen::Radio:
       handleRadioDelta(delta);
       break;
-    case Screen::Pairing: {
+    case Screen::PairMode: {
       int32_t next = (int32_t)_pairingOption + (delta > 0 ? 1 : -1);
       if (next < 0) next = 0;
       if (next > 1) next = 1;
       _pairingOption = (uint8_t)next;
       break;
     }
-    case Screen::AddPerson: {
-      size_t len = contactListLength();
-      if (len <= 1) break;
+    case Screen::Listen: {
+      size_t count = beaconCount();
+      if (count == 0) break;
       int32_t next = (int32_t)_pairingSelection + (delta > 0 ? 1 : -1);
-      int32_t max = (int32_t)len - 2; // skip broadcast slot
       if (next < 0) next = 0;
-      if (next > max) next = max;
+      if (next >= (int32_t)count) next = (int32_t)count - 1;
       _pairingSelection = (uint8_t)next;
+      break;
+    }
+    case Screen::ContactActions: {
+      int32_t next = (int32_t)_actionSelection + (delta > 0 ? 1 : -1);
+      if (next < 0) next = 0;
+      if (next > 1) next = 1;
+      _actionSelection = (uint8_t)next;
       break;
     }
     case Screen::CodeEntry:
@@ -216,45 +250,27 @@ void Ui::handleDelta(int32_t delta) {
 
 void Ui::handleComposeClick() {
   switch (_focus) {
-    case ComposeFocus::Destination:
-      _focus = (contactListLength() > 1) ? ComposeFocus::Contact : ComposeFocus::Cursor;
-      break;
     case ComposeFocus::Contact:
       selectContactTarget();
-      _focus = ComposeFocus::Cursor;
-      break;
-    case ComposeFocus::Cursor:
-      _focus = ComposeFocus::Character;
-      break;
-    case ComposeFocus::Character:
       _focus = ComposeFocus::Shortcut;
       break;
     case ComposeFocus::Shortcut:
-      applyShortcut();
       _focus = ComposeFocus::Send;
       break;
-    case ComposeFocus::Send:
-      if (_draft[0] == '\0') {
-        _focus = ComposeFocus::Destination;
-        _screen = Screen::Menu;
-        break;
-      }
+    case ComposeFocus::Send: {
+      const char* phrase = kShortcuts[_shortcutIdx % kShortcutCount];
+      std::strncpy(_draft, phrase, sizeof(_draft) - 1);
+      _draft[sizeof(_draft) - 1] = '\0';
       sendDraft();
-      _focus = ComposeFocus::Destination;
-      _screen = Screen::Menu;
+      _focus = ComposeFocus::Contact;
+      _screen = Screen::Contacts;
       break;
+    }
   }
 }
 
 void Ui::handleComposeDelta(int32_t delta) {
   switch (_focus) {
-    case ComposeFocus::Destination: {
-      int32_t nd = (int32_t)_dst + delta;
-      if (nd < 1) nd = 1;
-      if (nd > 65535) nd = 65535;
-      _dst = (uint16_t)nd;
-      break;
-    }
     case ComposeFocus::Contact: {
       size_t len = contactListLength();
       if (len <= 1) break;
@@ -264,26 +280,6 @@ void Ui::handleComposeDelta(int32_t delta) {
       if (next > max) next = max;
       _contactSelection = (uint8_t)next;
       selectContactTarget();
-      break;
-    }
-    case ComposeFocus::Cursor:
-      advanceCursor(delta);
-      syncCharIndexToDraft();
-      break;
-    case ComposeFocus::Character: {
-      size_t n = std::strlen(kCharset);
-      int32_t idx = 0;
-      if (delta > 3 || delta < -3) {
-        idx = (int32_t)findGroupBoundary(_charIndex, delta > 0);
-      } else {
-        idx = (int32_t)_charIndex + delta;
-        while (idx < 0) idx += (int32_t)n;
-        idx %= (int32_t)n;
-      }
-      _charIndex = (uint8_t)idx;
-
-      _draft[_cursor] = kCharset[_charIndex];
-      _draft[sizeof(_draft)-1] = '\0';
       break;
     }
     case ComposeFocus::Shortcut: {
@@ -344,31 +340,6 @@ void Ui::handleCodeDelta(int32_t delta) {
   _pairCodeInput = codeValue();
 }
 
-void Ui::advanceCursor(int32_t delta) {
-  int32_t next = (int32_t)_cursor + delta;
-  int32_t maxIdx = (int32_t)sizeof(_draft) - 2; // leave room for null
-  if (next < 0) next = 0;
-  if (next > maxIdx) next = maxIdx;
-  _cursor = (uint8_t)next;
-
-  if (_draft[_cursor] == '\0') {
-    _draft[_cursor] = ' ';
-    _draft[_cursor + 1] = '\0';
-  }
-}
-
-void Ui::syncCharIndexToDraft() {
-  char c = _draft[_cursor];
-  if (c == '\0') c = ' ';
-
-  const char* pos = std::strchr(kCharset, c);
-  if (pos) {
-    _charIndex = (uint8_t)(pos - kCharset);
-  } else {
-    _charIndex = 0;
-  }
-}
-
 void Ui::resetCodeDigits() {
   for (size_t i = 0; i < 4; i++) {
     _codeDigits[i] = 0;
@@ -380,28 +351,34 @@ uint16_t Ui::codeValue() const {
   return (uint16_t)(_codeDigits[0] * 1000 + _codeDigits[1] * 100 + _codeDigits[2] * 10 + _codeDigits[3]);
 }
 
-uint16_t Ui::pairingCodeFor(uint16_t peer) const {
-  uint32_t mixed = ((uint32_t)peer * 37U) ^ 0x5A5A;
+uint16_t Ui::pairingCodeFor(uint16_t peer, uint32_t nonce) const {
+  uint32_t mixed = ((uint32_t)peer * 37U) ^ 0x5A5A ^ nonce;
   return (uint16_t)((mixed % 9000U) + 1000U);
 }
 
 void Ui::confirmCodeEntry() {
-  if (_pairCandidate == 0) {
-    _screen = Screen::Pairing;
+  if (_pairCandidate == 0 || _pairCandidate == UINT16_MAX) {
+    _screen = Screen::Contacts;
     return;
   }
 
-  uint16_t expected = pairingCodeFor(_pairCandidate);
-  if (_pairCodeInput == expected) {
-    _dst = _pairCandidate;
-    sendPairRequest(_pairCandidate);
-    recordSeenPeer(_pairCandidate, false);
-    _lastJoiner = _pairCandidate;
-    _screen = Screen::Pairing;
-  } else {
-    resetCodeDigits();
-    _codeCursor = 0;
+  uint32_t acceptNonce = (uint32_t)_pairCodeInput;
+  WireChatPacket req{};
+  req.msgId = _pendingReqMsgId;
+  req.nonce = _pendingReqNonce;
+  sendPairAccept(_pairCandidate, req, acceptNonce);
+
+  if (_pairs && _pendingReqMsgId != 0 && _pendingReqNonce != 0) {
+    uint8_t key[PairingStore::kKeyLen] = {0};
+    if (_pairs->deriveFromRequest(_pairCandidate, _pendingReqMsgId, _pendingReqNonce, acceptNonce, key)) {
+      recordSeenPeer(_pairCandidate, true);
+      _lastJoiner = _pairCandidate;
+    }
   }
+  _pendingReqMsgId = 0;
+  _pendingReqNonce = 0;
+  _pairCandidate = 0;
+  _screen = Screen::Contacts;
 }
 
 char Ui::spinnerGlyph(uint32_t now) const {
@@ -410,36 +387,25 @@ char Ui::spinnerGlyph(uint32_t now) const {
   return frames[idx];
 }
 
-void Ui::applyShortcut() {
-  if (kShortcutCount == 0) return;
-  const char* phrase = kShortcuts[_shortcutIdx % kShortcutCount];
-  size_t phraseLen = ::strnlen(phrase, sizeof(_draft));
-  size_t room = sizeof(_draft) - 1;
-  size_t curLen = ::strnlen(_draft, room);
-  if (_cursor > curLen) _cursor = (uint8_t)curLen;
-  if (phraseLen > room - _cursor) phraseLen = room - _cursor;
-
-  size_t movable = (curLen > _cursor) ? (curLen - _cursor) : 0;
-  if (movable > room - _cursor - phraseLen) movable = room - _cursor - phraseLen;
-
-  std::memmove(_draft + _cursor + phraseLen, _draft + _cursor, movable + 1); // include null
-  std::memcpy(_draft + _cursor, phrase, phraseLen);
-  _cursor += (uint8_t)phraseLen;
-  _draft[room] = '\0';
-  syncCharIndexToDraft();
-}
-
 void Ui::selectContactTarget() {
   SeenPeer peer{};
   if (!contactAt(_contactSelection, peer)) return;
 
   if (peer.addr == 0) {
     _chatPeerFilter = 0;
+    _pairCandidate = 0;
+    return;
+  }
+
+  if (peer.isNew) {
+    _pairCandidate = UINT16_MAX;
+    _chatPeerFilter = 0;
     return;
   }
 
   _dst = peer.addr;
   _chatPeerFilter = peer.addr;
+  _pairCandidate = peer.addr;
   recordSeenPeer(peer.addr, peer.paired);
 }
 
@@ -588,9 +554,37 @@ void Ui::maybeBroadcastPresence(uint32_t now) {
   _radio->sendDm(pkt.to, pkt);
 }
 
+void Ui::maybeSendPairBeacon(uint32_t now) {
+  if (!_radio || !_beaconActive) return;
+
+  const uint32_t intervalMs = 5000;
+  if (_lastBeaconSendMs != 0 && (now - _lastBeaconSendMs) < intervalMs) return;
+  _lastBeaconSendMs = now;
+
+  WireChatPacket pkt{};
+  pkt.kind = PacketKind::Presence;
+  pkt.msgId = _nextMsgId++;
+  pkt.to = 0xFFFF;
+  pkt.from = _radio->localAddress();
+  pkt.ts = now / 1000;
+  pkt.refMsgId = 0;
+  pkt.nonce = nextNonce();
+  std::strncpy(pkt.text, "PAIR_BEACON", sizeof(pkt.text) - 1);
+  pkt.textLen = (uint16_t)::strnlen(pkt.text, sizeof(pkt.text));
+  pkt.reserved = 0;
+
+  _radio->sendDm(pkt.to, pkt);
+}
+
 void Ui::handlePresence(uint16_t src, const WireChatPacket& pkt) {
   uint16_t me = _radio ? _radio->localAddress() : 0;
   if (pkt.to != 0xFFFF && pkt.to != me) return;
+  if (std::strncmp(pkt.text, "PAIR_BEACON", sizeof(pkt.text)) == 0) {
+    rememberBeacon(src, millis());
+    recordSeenPeer(src, false);
+    return;
+  }
+
   notePairing(src, "Presence seen.");
 }
 
@@ -599,14 +593,13 @@ void Ui::handlePairRequest(uint16_t src, const WireChatPacket& pkt) {
   if (pkt.to != me && pkt.to != 0xFFFF) return;
   if (!_pairs) return;
 
-  uint8_t key[PairingStore::kKeyLen] = {0};
-  uint32_t acceptNonce = nextNonce();
-  if (_pairs->deriveFromRequest(src, pkt.msgId, pkt.nonce, acceptNonce, key)) {
-    notePairing(src, "Paired via incoming request.");
-    recordSeenPeer(src, true);
-  }
-  _lastJoiner = src;
-  sendPairAccept(src, pkt, acceptNonce);
+  _pairCandidate = src;
+  _pendingReqNonce = pkt.nonce;
+  _pendingReqMsgId = pkt.msgId;
+  _lastJoiner = 0;
+  _beaconActive = true;
+  _screen = Screen::Broadcast;
+  notePairing(src, "Pair request received; show PIN");
 }
 
 void Ui::handlePairAccept(uint16_t src, const WireChatPacket& pkt) {
@@ -615,11 +608,29 @@ void Ui::handlePairAccept(uint16_t src, const WireChatPacket& pkt) {
   if (!_pairs) return;
 
   uint8_t key[PairingStore::kKeyLen] = {0};
-  if (_pairs->resolvePendingRequest(src, pkt.refMsgId, pkt.nonce, key)) {
+  bool paired = false;
+
+  if (_pendingReqMsgId != 0 && _pendingReqNonce != 0 && src == _pairCandidate && pkt.refMsgId == _pendingReqMsgId) {
+    if (_pairs->deriveFromRequest(src, _pendingReqMsgId, _pendingReqNonce, pkt.nonce, key)) {
+      paired = true;
+    }
+  }
+
+  if (!paired && _pairs->resolvePendingRequest(src, pkt.refMsgId, pkt.nonce, key)) {
+    paired = true;
+  }
+
+  if (paired) {
     notePairing(src, "Pairing accepted.");
     recordSeenPeer(src, true);
+    _lastJoiner = src;
+    _pendingReqMsgId = 0;
+    _pendingReqNonce = 0;
+    _pairCandidate = 0;
+    _beaconActive = false;
+    _listeningForPairs = false;
+    _screen = Screen::Contacts;
   }
-  _lastJoiner = src;
 }
 
 void Ui::handleSecureChat(uint16_t src, const WireChatPacket& pkt) {
@@ -752,13 +763,15 @@ void Ui::sendPairRequest(uint16_t dst) {
   pkt.from = _radio->localAddress();
   pkt.ts = (uint32_t)(millis() / 1000);
   pkt.refMsgId = 0;
-  pkt.nonce = nextNonce();
+  if (_pendingReqNonce == 0) _pendingReqNonce = nextNonce();
+  pkt.nonce = _pendingReqNonce;
   pkt.textLen = 0;
   pkt.reserved = 0;
   std::strncpy(pkt.text, "PAIR_REQ", sizeof(pkt.text) - 1);
 
   _radio->sendDm(dst, pkt);
   _pairs->recordOutgoingRequest(dst, pkt.msgId, pkt.nonce);
+  _pendingReqMsgId = pkt.msgId;
   notePairing(dst, "Sent pairing request.");
   recordSeenPeer(dst, false);
 }
@@ -842,8 +855,8 @@ size_t Ui::contactCount() const {
 }
 
 size_t Ui::contactListLength() const {
-  // include "All" row
-  return contactCount() + 1;
+  // include "All" row and "New" action row
+  return contactCount() + 2;
 }
 
 bool Ui::contactAt(size_t idx, SeenPeer& out) const {
@@ -852,6 +865,16 @@ bool Ui::contactAt(size_t idx, SeenPeer& out) const {
     out.addr = 0;
     out.paired = false;
     out.lastSeenSec = 0;
+    out.isNew = false;
+    return true;
+  }
+
+  if (idx == contactListLength() - 1) {
+    out.active = true;
+    out.addr = 0;
+    out.paired = false;
+    out.lastSeenSec = 0;
+    out.isNew = true;
     return true;
   }
 
@@ -877,6 +900,62 @@ bool Ui::contactAt(size_t idx, SeenPeer& out) const {
     used[bestSlot] = true;
   }
 
+  return false;
+}
+
+void Ui::rememberBeacon(uint16_t addr, uint32_t now) {
+  for (size_t i = 0; i < kMaxBeacons; i++) {
+    if (_beacons[i].active && _beacons[i].addr == addr) {
+      _beacons[i].lastSeenMs = now;
+      return;
+    }
+  }
+
+  for (size_t i = 0; i < kMaxBeacons; i++) {
+    if (!_beacons[i].active) {
+      _beacons[i].active = true;
+      _beacons[i].addr = addr;
+      _beacons[i].lastSeenMs = now;
+      return;
+    }
+  }
+
+  size_t oldest = 0;
+  for (size_t i = 1; i < kMaxBeacons; i++) {
+    if (_beacons[i].lastSeenMs < _beacons[oldest].lastSeenMs) oldest = i;
+  }
+  _beacons[oldest].active = true;
+  _beacons[oldest].addr = addr;
+  _beacons[oldest].lastSeenMs = now;
+}
+
+size_t Ui::beaconCount() const {
+  size_t n = 0;
+  for (size_t i = 0; i < kMaxBeacons; i++) {
+    if (_beacons[i].active) n++;
+  }
+  return n;
+}
+
+bool Ui::beaconAt(size_t idx, PairBeacon& out) const {
+  bool used[kMaxBeacons] = {false};
+  for (size_t r = 0; r <= idx; r++) {
+    size_t best = kMaxBeacons;
+    uint32_t newest = 0;
+    for (size_t i = 0; i < kMaxBeacons; i++) {
+      if (!_beacons[i].active || used[i]) continue;
+      if (best == kMaxBeacons || _beacons[i].lastSeenMs > newest) {
+        best = i;
+        newest = _beacons[i].lastSeenMs;
+      }
+    }
+    if (best == kMaxBeacons) return false;
+    if (r == idx) {
+      out = _beacons[best];
+      return true;
+    }
+    used[best] = true;
+  }
   return false;
 }
 
@@ -959,14 +1038,10 @@ void Ui::tick() {
   handleInput();
   updateReliability();
 
-  // Auto-advance splash once the brand moment is done.
-  if (_screen == Screen::Splash && (millis() - _splashStartMs) > 1400) {
-    _screen = Screen::Menu;
-  }
-
   // Draw at ~10 FPS
   uint32_t now = millis();
   maybeBroadcastPresence(now);
+  maybeSendPairBeacon(now);
   if (now - _lastDrawMs < 100) return;
   _lastDrawMs = now;
 
@@ -974,30 +1049,20 @@ void Ui::tick() {
   _d->clear();
 
   switch (_screen) {
-    case Screen::Splash: drawSplash(); break;
     case Screen::Menu: drawMenu(); break;
     case Screen::Contacts: drawContacts(); break;
     case Screen::Compose: drawCompose(); break;
     case Screen::Radio: drawRadio(); break;
-    case Screen::Pairing: drawPairing(); break;
-    case Screen::Beacon: drawBeacon(); break;
-    case Screen::AddPerson: drawAddPerson(); break;
+    case Screen::PairMode: drawPairMode(); break;
+    case Screen::Broadcast: drawBroadcast(); break;
+    case Screen::Listen: drawListen(); break;
     case Screen::CodeEntry: drawCodeEntry(); break;
+    case Screen::ContactActions: drawContactActions(); break;
     case Screen::Status: drawStatus(); break;
     case Screen::Settings: drawSettings(); break;
   }
 
   _d->send();
-}
-
-void Ui::drawSplash() {
-  int w = _d->width();
-  int h = _d->height();
-  _d->setFontUi();
-  int x = (w / 2) - 20;
-  if (x < 0) x = 0;
-  int y = (h / 2);
-  _d->drawStr(x, y, "aLora");
 }
 
 void Ui::drawMenu() {
@@ -1007,7 +1072,7 @@ void Ui::drawMenu() {
   _d->drawHLine(0, 14, w);
 
   _d->setFontSmall();
-  const char* items[] = {"Contacts", "Chat", "Radio", "Devices"};
+  const char* items[] = {"Contacts", "Canned chat", "Radio", "Status"};
   int lineH = 14;
   int yBase = 28;
   for (size_t i = 0; i < 4; i++) {
@@ -1036,7 +1101,7 @@ void Ui::drawContacts() {
     return;
   }
 
-  _d->drawStr(2, 26, "Rotary: scroll  Click: chat");
+  _d->drawStr(2, 26, "Rotary: scroll  Click: open  Hold: actions");
 
   uint32_t now = (uint32_t)(millis() / 1000);
   int lineH = 12;
@@ -1052,6 +1117,8 @@ void Ui::drawContacts() {
     char line[32];
     if (peer.addr == 0) {
       std::snprintf(line, sizeof(line), "[ALL CHATS]");
+    } else if (peer.isNew) {
+      std::snprintf(line, sizeof(line), "[NEW]");
     } else {
       uint32_t age = (peer.lastSeenSec <= now) ? (now - peer.lastSeenSec) : 0;
       std::snprintf(line, sizeof(line), "%c%u (%lus)", peer.paired ? 'P' : 'S', (unsigned)peer.addr, (unsigned long)age);
@@ -1093,16 +1160,16 @@ void Ui::drawRadio() {
   _d->drawStr(4, yBase + lineH * 4, "Applies on next profile load");
 }
 
-void Ui::drawPairing() {
+void Ui::drawPairMode() {
   int w = _d->width();
   _d->setFontUi();
-  _d->drawStr(2, 12, "DEVICES");
+  _d->drawStr(2, 12, "NEW LINK");
   _d->drawHLine(0, 14, w);
 
   _d->setFontSmall();
-  _d->drawStr(2, 26, "Rotary: choose  Click: open");
+  _d->drawStr(2, 26, "Pick how to connect:");
 
-  const char* options[] = {"Signal beacon", "Add person"};
+  const char* options[] = {"Broadcast", "Listen"};
   int lineH = 14;
   int yBase = 42;
   for (size_t i = 0; i < 2; i++) {
@@ -1113,72 +1180,74 @@ void Ui::drawPairing() {
     _d->drawStr(4, y, options[i]);
   }
 
-  if (_lastJoiner != 0) {
-    char last[32];
-    snprintf(last, sizeof(last), "Last link: %u", (unsigned)_lastJoiner);
-    _d->drawStr(2, yBase + lineH * 2, last);
-  }
+  _d->drawStr(2, yBase + lineH * 2, "Click to confirm");
 }
 
-void Ui::drawBeacon() {
+void Ui::drawBroadcast() {
   int w = _d->width();
   _d->setFontUi();
-  _d->drawStr(2, 12, "SIGNAL");
+  _d->drawStr(2, 12, "BROADCAST");
   _d->drawHLine(0, 14, w);
 
   _d->setFontSmall();
   char line[32];
-  snprintf(line, sizeof(line), "Broadcasting %c", spinnerGlyph(millis()));
+  snprintf(line, sizeof(line), "Sending %c", spinnerGlyph(millis()));
   _d->drawStr(2, 32, line);
-  _d->drawStr(2, 46, "Waiting for a device...");
+  _d->drawStr(2, 44, "Every 5s until cancel");
 
-  uint16_t code = pairingCodeFor(_radio ? _radio->localAddress() : 1);
-  char codeLine[32];
-  snprintf(codeLine, sizeof(codeLine), "Share code: %04u", (unsigned)code);
-  _d->drawStr(2, 60, codeLine);
+  if (_pairCandidate != 0 && _pendingReqNonce != 0) {
+    uint16_t pin = pairingCodeFor(_pairCandidate, _pendingReqNonce);
+    char pinLine[24];
+    snprintf(pinLine, sizeof(pinLine), "PIN:%04u", (unsigned)pin);
+    _d->drawStr(2, 60, "Incoming request!");
+    _d->drawStr(2, 74, pinLine);
+  }
 
   if (_lastJoiner != 0) {
     char joined[32];
-    snprintf(joined, sizeof(joined), "Joined: %u", (unsigned)_lastJoiner);
-    _d->drawStr(2, 74, joined);
+    snprintf(joined, sizeof(joined), "Paired: %u", (unsigned)_lastJoiner);
+    _d->drawStr(2, 88, joined);
   }
-  _d->drawStr(2, 88, "Click to stop beacon");
+
+  _d->drawStr(2, 102, "Click to stop");
 }
 
-void Ui::drawAddPerson() {
+void Ui::drawListen() {
   int w = _d->width();
   _d->setFontUi();
-  _d->drawStr(2, 12, "ADD PERSON");
+  _d->drawStr(2, 12, "LISTEN");
   _d->drawHLine(0, 14, w);
 
   _d->setFontSmall();
-  size_t len = contactListLength();
-  if (len <= 1) {
+  _d->drawStr(2, 26, "Watching for broadcasts");
+
+  size_t count = beaconCount();
+  if (count == 0) {
     char wait[28];
     snprintf(wait, sizeof(wait), "Waiting %c", spinnerGlyph(millis()));
-    _d->drawStr(2, 32, wait);
-    _d->drawStr(2, 46, "Spin to refresh list");
+    _d->drawStr(2, 42, wait);
+    _d->drawStr(2, 56, "Click any time to cancel");
     return;
   }
-
-  _d->drawStr(2, 28, "Pick an ID, click to enter code");
 
   int lineH = 14;
   int yBase = 46;
   for (size_t row = 0; row < 4; row++) {
-    size_t idx = (size_t)_pairingSelection + row + 1; // skip broadcast/all row
-    if (idx >= len) break;
-    SeenPeer peer{};
-    if (!contactAt(idx, peer) || peer.addr == 0) continue;
+    size_t idx = (size_t)_pairingSelection + row;
+    if (idx >= count) break;
+    PairBeacon b{};
+    if (!beaconAt(idx, b)) continue;
 
-    int y = yBase + (int)row * lineH;
-    if (row == 0) {
-      _d->drawFrame(0, y - 10, w, lineH);
-    }
     char line[28];
-    snprintf(line, sizeof(line), "ID %u%s", (unsigned)peer.addr, peer.paired ? " (paired)" : "");
+    snprintf(line, sizeof(line), "Peer:%u", (unsigned)b.addr);
+    int y = yBase + (int)row * lineH;
+    if (idx == _pairingSelection) {
+      _d->drawFrame(0, y - 2, w, lineH);
+    }
     _d->drawStr(4, y, line);
   }
+
+  _d->drawStr(2, yBase + lineH * 4, "Click to request PIN");
 }
 
 void Ui::drawCodeEntry() {
@@ -1204,49 +1273,69 @@ void Ui::drawCodeEntry() {
   _d->drawStr(2, 74, "Code shown on other device");
 }
 
+void Ui::drawContactActions() {
+  int w = _d->width();
+  _d->setFontUi();
+  _d->drawStr(2, 12, "ACTIONS");
+  _d->drawHLine(0, 14, w);
+
+  _d->setFontSmall();
+  if (_actionTarget == 0) {
+    _d->drawStr(2, 32, "No contact selected");
+    return;
+  }
+
+  char target[28];
+  snprintf(target, sizeof(target), "Target:%u", (unsigned)_actionTarget);
+  _d->drawStr(2, 30, target);
+  _d->drawStr(2, 42, "Rotate to choose, click");
+
+  const char* options[] = {"Message", "Forget"};
+  int lineH = 14;
+  int yBase = 58;
+  for (size_t i = 0; i < 2; i++) {
+    int y = yBase + (int)i * lineH;
+    if ((int)i == _actionSelection) {
+      _d->drawFrame(0, y - 10, w, lineH);
+    }
+    _d->drawStr(4, y, options[i]);
+  }
+}
+
 void Ui::drawCompose() {
   int w = _d->width();
 
   _d->setFontUi();
-  _d->drawStr(2, 12, "SEND");
+  _d->drawStr(2, 12, "CANNED MSG");
   _d->drawHLine(0, 14, w);
 
   _d->setFontSmall();
-
-  char line1[24];
-  snprintf(line1, sizeof(line1), "To:%u", (unsigned)_dst);
-  _d->drawStr(2, 26, line1);
-
-  const char* focusLabel = "DST";
-  if (_focus == ComposeFocus::Contact) focusLabel = "CNT";
-  else if (_focus == ComposeFocus::Cursor) focusLabel = "CUR";
-  else if (_focus == ComposeFocus::Character) focusLabel = "CHAR";
-  else if (_focus == ComposeFocus::Shortcut) focusLabel = "SHOT";
-  else if (_focus == ComposeFocus::Send) focusLabel = "SEND";
-
-  char focusLine[28];
-  snprintf(focusLine, sizeof(focusLine), "Focus:%s", focusLabel);
-  _d->drawStr(2, 38, focusLine);
-
   SeenPeer sel{};
   contactAt(_contactSelection, sel);
   char contactLine[28];
-  if (sel.addr == 0) snprintf(contactLine, sizeof(contactLine), "List:All chats");
-  else snprintf(contactLine, sizeof(contactLine), "List:%u%s", (unsigned)sel.addr, sel.paired ? "*" : "");
-  _d->drawStr(2, 50, contactLine);
+  if (sel.addr == 0) snprintf(contactLine, sizeof(contactLine), "To:All chats");
+  else snprintf(contactLine, sizeof(contactLine), "To:%u%s", (unsigned)sel.addr, sel.paired ? "*" : "");
 
-  char shortcutLine[28];
-  snprintf(shortcutLine, sizeof(shortcutLine), "Shot:%s", kShortcuts[_shortcutIdx % kShortcutCount]);
-  _d->drawStr(2, 62, shortcutLine);
+  if (_focus == ComposeFocus::Contact) {
+    _d->drawFrame(0, 18, w, 14);
+  }
+  _d->drawStr(2, 28, contactLine);
 
-  _d->drawStr(2, 76, "Draft:");
-  _d->drawFrame(0, 80, w, 20);
+  _d->drawStr(2, 42, "Canned options:");
+  int lineH = 12;
+  int yBase = 56;
+  for (size_t i = 0; i < kShortcutCount; i++) {
+    int y = yBase + (int)i * lineH;
+    if (_focus == ComposeFocus::Shortcut && i == (_shortcutIdx % kShortcutCount)) {
+      _d->drawFrame(0, y - 10, w, lineH);
+    }
+    _d->drawStr(4, y, kShortcuts[i]);
+  }
 
-  // Render the draft (one line for now)
-  char shown[18];
-  std::strncpy(shown, _draft, sizeof(shown)-1);
-  shown[sizeof(shown)-1] = '\0';
-  _d->drawStr(2, 94, shown);
+  if (_focus == ComposeFocus::Send) {
+    _d->drawFrame(0, yBase + lineH * (int)kShortcutCount + 2, w, 14);
+  }
+  _d->drawStr(4, yBase + lineH * (int)kShortcutCount + 12, "Click to send selection");
 
   const ChatMsg* last = latestMessage(_chatPeerFilter);
   if (last) {

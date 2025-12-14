@@ -27,6 +27,9 @@ bool RotaryInput::begin() {
 
   _delta = 0;
   _clicked = false;
+  _held = false;
+  _btnDown = false;
+  _downSinceMs = 0;
   return true;
 }
 
@@ -38,9 +41,20 @@ void RotaryInput::tick() {
   }
 
   // Button
-  if (g_rotary.isEncoderButtonClicked()) {
-    _clicked = true;
+  bool nowDown = digitalRead(APP_ROTARY_PIN_BTN) == LOW;
+  uint32_t nowMs = millis();
+  if (nowDown && !_btnDown) {
+    _downSinceMs = nowMs;
   }
+  if (!nowDown && _btnDown) {
+    uint32_t heldMs = nowMs - _downSinceMs;
+    if (heldMs > 650) {
+      _held = true;
+    } else {
+      _clicked = true;
+    }
+  }
+  _btnDown = nowDown;
 }
 
 int32_t RotaryInput::readDelta() {
@@ -53,6 +67,12 @@ bool RotaryInput::wasClicked() {
   bool c = _clicked;
   _clicked = false;
   return c;
+}
+
+bool RotaryInput::wasHeld() {
+  bool h = _held;
+  _held = false;
+  return h;
 }
 
 #else
