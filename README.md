@@ -158,6 +158,10 @@ aLora is designed to be configured from PlatformIO without hardcoding “device 
 
 This keeps the firmware lightweight while remaining adaptable.
 
+## UX reference
+
+Planning notes for setup, daily use, and maintenance flows—as well as wireframe sketches for the primary screens—live in [`docs/UX-scenarios.md`](docs/UX-scenarios.md).
+
 ## Roadmap
 
 ### Milestone 0 — Stabilize the baseline (complete)
