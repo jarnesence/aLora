@@ -18,7 +18,19 @@ public:
   void onIncoming(uint16_t src, const WireChatPacket& pkt);
 
 private:
-  enum class Screen : uint8_t { Status=0, Contacts=1, Compose=2, Settings=3 };
+  enum class Screen : uint8_t {
+    Splash=0,
+    Menu=1,
+    Contacts=2,
+    Compose=3,
+    Radio=4,
+    Pairing=5,
+    Beacon=6,
+    AddPerson=7,
+    CodeEntry=8,
+    Status=9,
+    Settings=10
+  };
   enum class ComposeFocus : uint8_t {
     Destination=0,
     Contact=1,
@@ -48,8 +60,29 @@ private:
   PendingSend _pending[kMaxPending];
 
   Screen _screen = Screen::Status;
+  uint32_t _splashStartMs = 0;
   uint32_t _lastDrawMs = 0;
   uint32_t _lastPresenceMs = 0;
+
+  uint8_t _menuIndex = 0;
+  uint8_t _pairingOption = 0;  // 0 = beacon, 1 = add person
+
+  // Radio tuning presented in UI (does not rewrite runtime config yet)
+  uint32_t _uiFreqHz = APP_LORA_FREQ_HZ;
+  int8_t _uiBwKHz = APP_LORA_BW_KHZ;
+  uint8_t _uiSf = APP_LORA_SF;
+  int8_t _uiTxDbm = APP_LORA_TX_DBM;
+  uint8_t _radioField = 0;
+
+  // Pairing UX helpers
+  bool _beaconActive = false;
+  uint32_t _beaconStartMs = 0;
+  uint16_t _pairCandidate = 0;
+  uint8_t _pairingSelection = 0;
+  uint16_t _lastJoiner = 0;
+  uint16_t _pairCodeInput = 0;
+  uint8_t _codeDigits[4] = {0};
+  uint8_t _codeCursor = 0;
 
   // Compose state
   uint16_t _dst = 1;
@@ -61,8 +94,15 @@ private:
   uint8_t _shortcutIdx = 0;
   uint32_t _nextMsgId = 1;
 
+  void drawSplash();
+  void drawMenu();
   void drawContacts();
   void drawCompose();
+  void drawRadio();
+  void drawPairing();
+  void drawBeacon();
+  void drawAddPerson();
+  void drawCodeEntry();
   void drawStatus();
   void drawSettings();
 
@@ -75,6 +115,8 @@ private:
   void handleDelta(int32_t delta);
   void handleComposeClick();
   void handleComposeDelta(int32_t delta);
+  void handleRadioDelta(int32_t delta);
+  void handleCodeDelta(int32_t delta);
   void advanceCursor(int32_t delta);
   void syncCharIndexToDraft();
   void applyShortcut();
@@ -98,6 +140,11 @@ private:
   bool decryptSecureText(uint16_t src, const WireChatPacket& pkt, char* outText, size_t outLen);
   bool ensurePairedOrRequest(uint16_t dst);
   uint32_t nextNonce() const;
+  uint16_t pairingCodeFor(uint16_t peer) const;
+  uint16_t codeValue() const;
+  void resetCodeDigits();
+  void confirmCodeEntry();
+  char spinnerGlyph(uint32_t now) const;
 
   struct SeenPeer {
     bool active = false;

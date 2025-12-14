@@ -31,6 +31,14 @@ static uint8_t findGroupBoundary(uint8_t current, bool forward) {
 
 void Ui::begin() {
   _lastDrawMs = 0;
+  _screen = Screen::Splash;
+  _splashStartMs = millis();
+  _menuIndex = 0;
+  _radioField = 0;
+  _pairingOption = 0;
+  _pairingSelection = 0;
+  _beaconActive = false;
+  resetCodeDigits();
   syncCharIndexToDraft();
 }
 
@@ -87,28 +95,82 @@ void Ui::handleInput() {
 }
 
 void Ui::handleClick() {
-  if (_screen == Screen::Compose) {
-    handleComposeClick();
-    return;
-  }
-
-  if (_screen == Screen::Status) {
-    _screen = Screen::Contacts;
-  }
-  else if (_screen == Screen::Contacts) {
-    selectContactTarget();
-    _screen = Screen::Compose;
-  }
-  else if (_screen == Screen::Settings) {
-    _screen = Screen::Status;
-  }
-  else {
-    _screen = Screen::Status;
+  switch (_screen) {
+    case Screen::Splash:
+      _screen = Screen::Menu;
+      return;
+    case Screen::Menu:
+      switch (_menuIndex % 4) {
+        case 0: _screen = Screen::Contacts; return;
+        case 1: _screen = Screen::Compose; _focus = ComposeFocus::Cursor; return;
+        case 2: _screen = Screen::Radio; return;
+        case 3: _screen = Screen::Pairing; return;
+        default: break;
+      }
+      return;
+    case Screen::Contacts:
+      selectContactTarget();
+      _screen = Screen::Compose;
+      _focus = ComposeFocus::Cursor;
+      return;
+    case Screen::Compose:
+      handleComposeClick();
+      return;
+    case Screen::Radio:
+      _radioField++;
+      if (_radioField > 3) {
+        _radioField = 0;
+        _screen = Screen::Menu;
+      }
+      return;
+    case Screen::Pairing:
+      if ((_pairingOption % 2) == 0) {
+        _beaconActive = true;
+        _beaconStartMs = millis();
+        _screen = Screen::Beacon;
+      } else {
+        _screen = Screen::AddPerson;
+        _pairingSelection = 0;
+      }
+      return;
+    case Screen::Beacon:
+      _beaconActive = false;
+      _screen = Screen::Pairing;
+      return;
+    case Screen::AddPerson: {
+      SeenPeer peer{};
+      if (contactAt((size_t)_pairingSelection + 1, peer) && peer.addr != 0) {
+        _pairCandidate = peer.addr;
+        resetCodeDigits();
+        _codeCursor = 0;
+        _screen = Screen::CodeEntry;
+      }
+      return;
+    }
+    case Screen::CodeEntry:
+      if (_codeCursor < 3) {
+        _codeCursor++;
+      } else {
+        confirmCodeEntry();
+      }
+      return;
+    default:
+      _screen = Screen::Menu;
+      return;
   }
 }
 
 void Ui::handleDelta(int32_t delta) {
   switch (_screen) {
+    case Screen::Splash:
+      break;
+    case Screen::Menu: {
+      int32_t next = (int32_t)_menuIndex + (delta > 0 ? 1 : -1);
+      if (next < 0) next = 0;
+      if (next > 3) next = 3;
+      _menuIndex = (uint8_t)next;
+      break;
+    }
     case Screen::Contacts: {
       int32_t next = (int32_t)_contactScroll + (delta > 0 ? 1 : -1);
       int32_t max = (int32_t)contactListLength() - 1;
@@ -122,6 +184,29 @@ void Ui::handleDelta(int32_t delta) {
       handleComposeDelta(delta);
       break;
     }
+    case Screen::Radio:
+      handleRadioDelta(delta);
+      break;
+    case Screen::Pairing: {
+      int32_t next = (int32_t)_pairingOption + (delta > 0 ? 1 : -1);
+      if (next < 0) next = 0;
+      if (next > 1) next = 1;
+      _pairingOption = (uint8_t)next;
+      break;
+    }
+    case Screen::AddPerson: {
+      size_t len = contactListLength();
+      if (len <= 1) break;
+      int32_t next = (int32_t)_pairingSelection + (delta > 0 ? 1 : -1);
+      int32_t max = (int32_t)len - 2; // skip broadcast slot
+      if (next < 0) next = 0;
+      if (next > max) next = max;
+      _pairingSelection = (uint8_t)next;
+      break;
+    }
+    case Screen::CodeEntry:
+      handleCodeDelta(delta);
+      break;
     case Screen::Status:
     case Screen::Settings:
     default:
@@ -151,12 +236,12 @@ void Ui::handleComposeClick() {
     case ComposeFocus::Send:
       if (_draft[0] == '\0') {
         _focus = ComposeFocus::Destination;
-        _screen = Screen::Settings;
+        _screen = Screen::Menu;
         break;
       }
       sendDraft();
       _focus = ComposeFocus::Destination;
-      _screen = Screen::Settings;
+      _screen = Screen::Menu;
       break;
   }
 }
@@ -215,6 +300,50 @@ void Ui::handleComposeDelta(int32_t delta) {
   }
 }
 
+void Ui::handleRadioDelta(int32_t delta) {
+  int32_t sign = (delta > 0) ? 1 : -1;
+  switch (_radioField % 4) {
+    case 0: {
+      int64_t nf = (int64_t)_uiFreqHz + (int64_t)sign * 50000;
+      if (nf < 860000000) nf = 860000000;
+      if (nf > 930000000) nf = 930000000;
+      _uiFreqHz = (uint32_t)nf;
+      break;
+    }
+    case 1: {
+      int32_t nbw = (int32_t)_uiBwKHz + (int32_t)sign * 25;
+      if (nbw < 62) nbw = 62;
+      if (nbw > 500) nbw = 500;
+      _uiBwKHz = (int8_t)nbw;
+      break;
+    }
+    case 2: {
+      int32_t nsf = (int32_t)_uiSf + sign;
+      if (nsf < 6) nsf = 6;
+      if (nsf > 12) nsf = 12;
+      _uiSf = (uint8_t)nsf;
+      break;
+    }
+    case 3: {
+      int32_t ntx = (int32_t)_uiTxDbm + sign;
+      if (ntx < 2) ntx = 2;
+      if (ntx > 20) ntx = 20;
+      _uiTxDbm = (int8_t)ntx;
+      break;
+    }
+  }
+}
+
+void Ui::handleCodeDelta(int32_t delta) {
+  int32_t sign = (delta > 0) ? 1 : -1;
+  uint8_t idx = _codeCursor % 4;
+  int32_t next = (int32_t)_codeDigits[idx] + sign;
+  if (next < 0) next = 9;
+  if (next > 9) next = 0;
+  _codeDigits[idx] = (uint8_t)next;
+  _pairCodeInput = codeValue();
+}
+
 void Ui::advanceCursor(int32_t delta) {
   int32_t next = (int32_t)_cursor + delta;
   int32_t maxIdx = (int32_t)sizeof(_draft) - 2; // leave room for null
@@ -238,6 +367,47 @@ void Ui::syncCharIndexToDraft() {
   } else {
     _charIndex = 0;
   }
+}
+
+void Ui::resetCodeDigits() {
+  for (size_t i = 0; i < 4; i++) {
+    _codeDigits[i] = 0;
+  }
+  _pairCodeInput = 0;
+}
+
+uint16_t Ui::codeValue() const {
+  return (uint16_t)(_codeDigits[0] * 1000 + _codeDigits[1] * 100 + _codeDigits[2] * 10 + _codeDigits[3]);
+}
+
+uint16_t Ui::pairingCodeFor(uint16_t peer) const {
+  uint32_t mixed = ((uint32_t)peer * 37U) ^ 0x5A5A;
+  return (uint16_t)((mixed % 9000U) + 1000U);
+}
+
+void Ui::confirmCodeEntry() {
+  if (_pairCandidate == 0) {
+    _screen = Screen::Pairing;
+    return;
+  }
+
+  uint16_t expected = pairingCodeFor(_pairCandidate);
+  if (_pairCodeInput == expected) {
+    _dst = _pairCandidate;
+    sendPairRequest(_pairCandidate);
+    recordSeenPeer(_pairCandidate, false);
+    _lastJoiner = _pairCandidate;
+    _screen = Screen::Pairing;
+  } else {
+    resetCodeDigits();
+    _codeCursor = 0;
+  }
+}
+
+char Ui::spinnerGlyph(uint32_t now) const {
+  static const char frames[] = {'|', '/', '-', '\\'};
+  size_t idx = ((now / 200) % 4);
+  return frames[idx];
 }
 
 void Ui::applyShortcut() {
@@ -435,6 +605,7 @@ void Ui::handlePairRequest(uint16_t src, const WireChatPacket& pkt) {
     notePairing(src, "Paired via incoming request.");
     recordSeenPeer(src, true);
   }
+  _lastJoiner = src;
   sendPairAccept(src, pkt, acceptNonce);
 }
 
@@ -448,6 +619,7 @@ void Ui::handlePairAccept(uint16_t src, const WireChatPacket& pkt) {
     notePairing(src, "Pairing accepted.");
     recordSeenPeer(src, true);
   }
+  _lastJoiner = src;
 }
 
 void Ui::handleSecureChat(uint16_t src, const WireChatPacket& pkt) {
@@ -787,6 +959,11 @@ void Ui::tick() {
   handleInput();
   updateReliability();
 
+  // Auto-advance splash once the brand moment is done.
+  if (_screen == Screen::Splash && (millis() - _splashStartMs) > 1400) {
+    _screen = Screen::Menu;
+  }
+
   // Draw at ~10 FPS
   uint32_t now = millis();
   maybeBroadcastPresence(now);
@@ -797,13 +974,50 @@ void Ui::tick() {
   _d->clear();
 
   switch (_screen) {
+    case Screen::Splash: drawSplash(); break;
+    case Screen::Menu: drawMenu(); break;
     case Screen::Contacts: drawContacts(); break;
     case Screen::Compose: drawCompose(); break;
+    case Screen::Radio: drawRadio(); break;
+    case Screen::Pairing: drawPairing(); break;
+    case Screen::Beacon: drawBeacon(); break;
+    case Screen::AddPerson: drawAddPerson(); break;
+    case Screen::CodeEntry: drawCodeEntry(); break;
     case Screen::Status: drawStatus(); break;
     case Screen::Settings: drawSettings(); break;
   }
 
   _d->send();
+}
+
+void Ui::drawSplash() {
+  int w = _d->width();
+  int h = _d->height();
+  _d->setFontUi();
+  int x = (w / 2) - 20;
+  if (x < 0) x = 0;
+  int y = (h / 2);
+  _d->drawStr(x, y, "aLora");
+}
+
+void Ui::drawMenu() {
+  int w = _d->width();
+  _d->setFontUi();
+  _d->drawStr(4, 12, "MENU");
+  _d->drawHLine(0, 14, w);
+
+  _d->setFontSmall();
+  const char* items[] = {"Contacts", "Chat", "Radio", "Devices"};
+  int lineH = 14;
+  int yBase = 28;
+  for (size_t i = 0; i < 4; i++) {
+    int y = yBase + (int)i * lineH;
+    if (i == (_menuIndex % 4)) {
+      _d->drawFrame(0, y - 10, w, lineH);
+    }
+    _d->drawStr(6, y, items[i]);
+  }
+  _d->drawStr(6, yBase + lineH * 4, "Rotary: left/right  | Click: enter");
 }
 
 void Ui::drawContacts() {
@@ -815,13 +1029,14 @@ void Ui::drawContacts() {
   _d->setFontSmall();
   size_t len = contactListLength();
   if (len <= 1) {
-    _d->drawStr(2, 32, "No peers yet.");
-    _d->drawStr(2, 44, "Rotate after beacons.");
+    char wait[24];
+    snprintf(wait, sizeof(wait), "Listening %c", spinnerGlyph(millis()));
+    _d->drawStr(2, 32, wait);
+    _d->drawStr(2, 44, "No peers yet");
     return;
   }
 
-  _d->drawStr(2, 26, "Click=target");
-  _d->drawStr(70, 26, "Rot=scroll");
+  _d->drawStr(2, 26, "Rotary: scroll  Click: chat");
 
   uint32_t now = (uint32_t)(millis() / 1000);
   int lineH = 12;
@@ -848,6 +1063,145 @@ void Ui::drawContacts() {
     }
     _d->drawStr(2, y, line);
   }
+}
+
+void Ui::drawRadio() {
+  int w = _d->width();
+  _d->setFontUi();
+  _d->drawStr(2, 12, "RADIO");
+  _d->drawHLine(0, 14, w);
+
+  _d->setFontSmall();
+  _d->drawStr(2, 26, "Rotate: adjust  Click: next");
+
+  char line[32];
+  const char* labels[] = {"Freq", "BW", "SF", "TX"};
+  uint32_t values[] = {_uiFreqHz, (uint32_t)_uiBwKHz, (uint32_t)_uiSf, (uint32_t)_uiTxDbm};
+  const char* suffix[] = {"Hz", "kHz", "", " dBm"};
+
+  int lineH = 14;
+  int yBase = 42;
+  for (size_t i = 0; i < 4; i++) {
+    int y = yBase + (int)i * lineH;
+    snprintf(line, sizeof(line), "%s:%lu%s", labels[i], (unsigned long)values[i], suffix[i]);
+    if (i == (_radioField % 4)) {
+      _d->drawFrame(0, y - 10, w, lineH);
+    }
+    _d->drawStr(4, y, line);
+  }
+
+  _d->drawStr(4, yBase + lineH * 4, "Applies on next profile load");
+}
+
+void Ui::drawPairing() {
+  int w = _d->width();
+  _d->setFontUi();
+  _d->drawStr(2, 12, "DEVICES");
+  _d->drawHLine(0, 14, w);
+
+  _d->setFontSmall();
+  _d->drawStr(2, 26, "Rotary: choose  Click: open");
+
+  const char* options[] = {"Signal beacon", "Add person"};
+  int lineH = 14;
+  int yBase = 42;
+  for (size_t i = 0; i < 2; i++) {
+    int y = yBase + (int)i * lineH;
+    if (i == (_pairingOption % 2)) {
+      _d->drawFrame(0, y - 10, w, lineH);
+    }
+    _d->drawStr(4, y, options[i]);
+  }
+
+  if (_lastJoiner != 0) {
+    char last[32];
+    snprintf(last, sizeof(last), "Last link: %u", (unsigned)_lastJoiner);
+    _d->drawStr(2, yBase + lineH * 2, last);
+  }
+}
+
+void Ui::drawBeacon() {
+  int w = _d->width();
+  _d->setFontUi();
+  _d->drawStr(2, 12, "SIGNAL");
+  _d->drawHLine(0, 14, w);
+
+  _d->setFontSmall();
+  char line[32];
+  snprintf(line, sizeof(line), "Broadcasting %c", spinnerGlyph(millis()));
+  _d->drawStr(2, 32, line);
+  _d->drawStr(2, 46, "Waiting for a device...");
+
+  uint16_t code = pairingCodeFor(_radio ? _radio->localAddress() : 1);
+  char codeLine[32];
+  snprintf(codeLine, sizeof(codeLine), "Share code: %04u", (unsigned)code);
+  _d->drawStr(2, 60, codeLine);
+
+  if (_lastJoiner != 0) {
+    char joined[32];
+    snprintf(joined, sizeof(joined), "Joined: %u", (unsigned)_lastJoiner);
+    _d->drawStr(2, 74, joined);
+  }
+  _d->drawStr(2, 88, "Click to stop beacon");
+}
+
+void Ui::drawAddPerson() {
+  int w = _d->width();
+  _d->setFontUi();
+  _d->drawStr(2, 12, "ADD PERSON");
+  _d->drawHLine(0, 14, w);
+
+  _d->setFontSmall();
+  size_t len = contactListLength();
+  if (len <= 1) {
+    char wait[28];
+    snprintf(wait, sizeof(wait), "Waiting %c", spinnerGlyph(millis()));
+    _d->drawStr(2, 32, wait);
+    _d->drawStr(2, 46, "Spin to refresh list");
+    return;
+  }
+
+  _d->drawStr(2, 28, "Pick an ID, click to enter code");
+
+  int lineH = 14;
+  int yBase = 46;
+  for (size_t row = 0; row < 4; row++) {
+    size_t idx = (size_t)_pairingSelection + row + 1; // skip broadcast/all row
+    if (idx >= len) break;
+    SeenPeer peer{};
+    if (!contactAt(idx, peer) || peer.addr == 0) continue;
+
+    int y = yBase + (int)row * lineH;
+    if (row == 0) {
+      _d->drawFrame(0, y - 10, w, lineH);
+    }
+    char line[28];
+    snprintf(line, sizeof(line), "ID %u%s", (unsigned)peer.addr, peer.paired ? " (paired)" : "");
+    _d->drawStr(4, y, line);
+  }
+}
+
+void Ui::drawCodeEntry() {
+  int w = _d->width();
+  _d->setFontUi();
+  _d->drawStr(2, 12, "PAIR CODE");
+  _d->drawHLine(0, 14, w);
+
+  _d->setFontSmall();
+  char target[28];
+  snprintf(target, sizeof(target), "Device: %u", (unsigned)_pairCandidate);
+  _d->drawStr(2, 30, target);
+  _d->drawStr(2, 42, "Rotate digit, click next");
+
+  char codeLine[8] = {0};
+  for (size_t i = 0; i < 4; i++) {
+    codeLine[i] = '0' + _codeDigits[i];
+  }
+  _d->drawStr(2, 58, codeLine);
+  int cursorX = 2 + (int)_codeCursor * 8;
+  _d->drawVLine(cursorX, 50, 20);
+
+  _d->drawStr(2, 74, "Code shown on other device");
 }
 
 void Ui::drawCompose() {

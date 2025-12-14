@@ -121,6 +121,7 @@ This repository is in a **prototype stabilization phase**. Latest highlights:
 * **Milestone 2 security:** devices **broadcast presence**, automatically **pair on request/accept**, derive **shared AES-256 keys** from deterministic nonces, and encrypt DM payloads with **AES-256-CTR** plus replay protection.
 * **Milestone 3 usability:** rotary text entry has **group jumps + reusable shortcuts**, chat history can be **filtered by contact**, and a **contacts roster** tracks paired + recently seen peers for instant addressing.
 * **Persistence + discipline:** pairing keys/replay windows persist in NVS, airtime is bucketed per minute to avoid overruns, stale routes trigger discovery before retries, and the interoperability contract below locks down on-air expectations.
+* **UI refresh:** brand-only splash screen, rotary-driven home carousel, and pairing helpers (signal beacon, code entry) keep navigation muscle-memory-friendly.
 
 ## Known gaps / next steps
 
