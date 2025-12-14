@@ -125,6 +125,9 @@ bool MeshRadio::sendDm(uint16_t dst, const WireChatPacket& pkt) {
 
   // Avoid template instantiation with T=void by passing a typed pointer.
   WireChatPacket tmp = pkt;
+  if (tmp.kind != PacketKind::Ack && tmp.kind != PacketKind::Chat) {
+    tmp.kind = PacketKind::Chat;
+  }
   tmp.to = dst;
   if (tmp.msgId == 0) tmp.msgId = ++_msgSeq;
   if (tmp.from == 0) tmp.from = localAddress();

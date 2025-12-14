@@ -15,8 +15,16 @@ void Ui::begin() {
 }
 
 void Ui::onIncoming(uint16_t src, const WireChatPacket& pkt) {
-  if (!_log) return;
-  _log->add(src, false, pkt.text, (uint32_t)(millis()/1000));
+  if (pkt.kind == PacketKind::Ack) {
+    if (_log) _log->markDelivered(pkt.refMsgId);
+    return;
+  }
+
+  if (_log) _log->add(src, false, pkt.msgId, pkt.text, (uint32_t)(millis()/1000));
+
+  if (_radio) {
+    sendAck(src, pkt.msgId);
+  }
 }
 
 void Ui::handleInput() {
@@ -141,18 +149,32 @@ void Ui::sendDraft() {
   if (!_radio) return;
 
   WireChatPacket pkt{};
+  pkt.kind = PacketKind::Chat;
   pkt.msgId = _nextMsgId++;
   pkt.to = _dst;
   pkt.from = _radio->localAddress();
   pkt.ts = (uint32_t)(millis() / 1000);
+  pkt.refMsgId = 0;
   std::strncpy(pkt.text, _draft, sizeof(pkt.text) - 1);
   pkt.text[sizeof(pkt.text) - 1] = '\0';
 
   _radio->sendDm(_dst, pkt);
 
   if (_log) {
-    _log->add(_dst, true, pkt.text, pkt.ts);
+    _log->add(_dst, true, pkt.msgId, pkt.text, pkt.ts);
   }
+}
+
+void Ui::sendAck(uint16_t dst, uint32_t refMsgId) {
+  WireChatPacket ack{};
+  ack.kind = PacketKind::Ack;
+  ack.msgId = _nextMsgId++;
+  ack.to = dst;
+  ack.from = _radio->localAddress();
+  ack.ts = (uint32_t)(millis() / 1000);
+  ack.refMsgId = refMsgId;
+  ack.text[0] = '\0';
+  _radio->sendDm(dst, ack);
 }
 
 void Ui::tick() {
@@ -198,8 +220,13 @@ void Ui::drawChat() {
 
     const ChatMsg& m = _log->at((size_t)idx);
 
+    const char* state = "";
+    if (m.outgoing) {
+      state = m.delivered ? "✓" : "…";
+    }
+
     char header[18];
-    snprintf(header, sizeof(header), "%c%u:", m.outgoing ? '>' : '<', (unsigned)m.src);
+    snprintf(header, sizeof(header), "%c%u%s:", m.outgoing ? '>' : '<', (unsigned)m.src, state);
     _d->drawStr(2, y, header);
 
     // Show a compact snippet; for portrait width it's very limited.

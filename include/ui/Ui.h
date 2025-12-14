@@ -44,6 +44,8 @@ private:
   void drawStatus();
   void drawSettings();
 
+  void sendAck(uint16_t dst, uint32_t refMsgId);
+
   void handleInput();
   void handleClick();
   void handleDelta(int32_t delta);

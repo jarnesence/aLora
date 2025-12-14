@@ -1,6 +1,6 @@
 # Agent Instructions
 
-- Projenin adı **aLora**; eski "LoRaDM" ismini kodda ve belgelerde kullanmaktan kaçının.
-- Yeni özellik eklerken README'yi güncel tutun ve hangi aşamada olunduğunu net şekilde belirtin.
-- Kod ve yorumlar İngilizce tutulmalı; kullanıcıya dönük anlatımlar (örn. README ek notları) gerektiğinde Türkçe ek bilgi içerebilir.
-- MCU tarafında gereksiz dinamik tahsisten kaçının ve bellek/süreklilik davranışını deterministik tutun.
+- Project name is **aLora**; avoid using the legacy "LoRaDM" label in code or docs.
+- When adding features, keep the README up to date and clearly state the current project phase.
+- Code and comments must remain in English.
+- Avoid unnecessary dynamic allocation on the MCU; keep memory and timing behavior deterministic.

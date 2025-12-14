@@ -2,9 +2,9 @@
 
 > **Status:** Early prototype, now with interactive compose/send, on-device deduplication, and OLED bring-up hardening. Core reliability and security work continues.
 
-## Yapay zeka notu
+## AI authoring note
 
-Bu proje, OpenAI tarafından geliştirilen **GPT-5.1-Codex-Max** (ben) tarafından, **Járn**'ın doğrudan kontrolü ve tasarım kararlarıyla yürütülmektedir. Kod, mimari kararlar ve ilerleme raporları yapay zeka tarafından üretilmekte; Járn nihai onay ve yönlendirmeyi sağlamaktadır.
+This project is designed and implemented by **GPT-5.1-Codex-Max** (me), operating under the direct direction and approval of **Járn**. Every code change, architectural decision, and progress note is authored by the AI, with Járn providing oversight and final sign-off.
 
 ## Why this project exists
 
@@ -113,11 +113,12 @@ This repository is in a **prototype stabilization phase**. Latest highlights:
 * Rotary input integrated for menu navigation and text editing.
 * Compose view can now **set destination, move the cursor, edit characters, and send** DMs directly over the mesh.
 * Incoming packets are **deduplicated on-device** before reaching the UI/log.
+* One-hop delivery receipts are **acknowledged and reflected in the chat list** (checkmark when delivered).
 * Basic message persistence (chat tail/history concept).
 
 ## Known gaps / next steps
 
-* **Reliable delivery + receipts:** strict double-tick semantics, retry logic, and failure escalation.
+* **Reliable delivery + receipts:** strict double-tick semantics, retry logic, and failure escalation (basic one-hop ACKs are in place; retries are pending).
 * **Pairing protocol:** advertisement, request/accept UX, and secure key establishment.
 * **AES-256 E2E:** encryption of DM payloads, key storage, replay protection.
 * **Routing-aware behavior:** track successful paths and prefer them; fall back to controlled discovery.
@@ -199,17 +200,17 @@ This keeps the firmware lightweight while remaining adaptable.
 * **Airtime is precious:** no unnecessary broadcasts, bounded retries, and strict dedupe.
 * **Security by design:** pairing and encryption are first-class, not optional patches.
 
-## Járn’a saha desteği ve bağışlar
+## Hardware testing support for Járn
 
-Proje şu anda **erken prototip** aşamasında ve donanım çeşitliliğini artırmak, uzun menzil testleri yapmak için ek cihazlara ihtiyaçlarımız var. Bu noktada Járn’ın sahada yeni modüller/antenler satın alıp gerçek koşullarda denemeler yapabilmesi, aLora’nın güvenilirlik ve menzil hedeflerini hızlandıracak. Eğer katkıda bulunmak isterseniz, aşağıdaki adreslere destek gönderebilirsiniz:
+The project is in an **early prototype** stage and needs more hardware to broaden radio testing. Supporting Járn’s field work (new modules, antennas, and test gear) will accelerate coverage, interference tolerance, and platform compatibility work. Contributions can be sent to:
 
 * **BTC:** `bc1qpp3ptl2hhrdcn86e9vujanneg9frsrgd4czq7q`
 * **ETH:** `0x2FF7bf0D92aC98d4036a89D1612021473cB82772`
 * **XRP:** `rJ7LFDzsj9NuoCWYmc3LnVpJde13ZwG635`
-* **USDT (ETH ağı):** `0x2FF7bf0D92aC98d4036a89D1612021473cB82772`
+* **USDT (ETH network):** `0x2FF7bf0D92aC98d4036a89D1612021473cB82772`
 * **Solana:** `Huzw3NSc73hPUWNNJcS1r2uKT61Ekqg2YN3ihshie8W5`
 
-**Neden şimdi?** Donanım çeşitlendirmesi olmadan ağın kapsama, parazit toleransı ve farklı LoRa yongalarındaki davranışını doğrulamak yavaş ilerler. Sağlayacağınız destekle Járn yeni kartlar, antenler ve test ekipmanı alabilecek; ben (GPT-5.1-Codex-Max) sahadan gelen geri bildirimle yazılımı hızla iyileştirip bir sonraki aşamaya taşıyacağım.
+**Why now?** Without diverse hardware, validating coverage, noise resilience, and cross-chip behavior takes longer. Your support lets Járn purchase boards, antennas, and test equipment while I (GPT-5.1-Codex-Max) quickly iterate on the firmware using field feedback.
 * **Modularity:** radio/mesh, protocol, security, storage, and UI remain separable.
 
 ## Repository structure (intended)

@@ -52,7 +52,7 @@ void setup() {
 
 #if defined(APP_DISPLAY_OLED)
   // Add a local boot message to chat log to confirm UI is alive.
-  g_log.add(0, true, "aLora boot", (uint32_t)(millis()/1000));
+  g_log.add(0, false, 0, "aLora boot", (uint32_t)(millis()/1000));
 #endif
 }
 

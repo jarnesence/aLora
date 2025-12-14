@@ -6,6 +6,8 @@ struct ChatMsg {
   uint32_t ts;
   uint16_t src;
   bool outgoing;
+  bool delivered;
+  uint32_t msgId;
   char text[96];
 };
 
@@ -13,7 +15,8 @@ class ChatLog {
 public:
   static constexpr size_t MAX = 30;
 
-  void add(uint16_t src, bool outgoing, const char* text, uint32_t ts);
+  void add(uint16_t src, bool outgoing, uint32_t msgId, const char* text, uint32_t ts);
+  bool markDelivered(uint32_t msgId);
   size_t size() const { return _count; }
   // idx=0 oldest ... idx=size-1 newest
   const ChatMsg& at(size_t idx) const;
