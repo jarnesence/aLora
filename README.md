@@ -198,6 +198,18 @@ This keeps the firmware lightweight while remaining adaptable.
 * **Interoperability first:** changes to the on-air format require versioning.
 * **Airtime is precious:** no unnecessary broadcasts, bounded retries, and strict dedupe.
 * **Security by design:** pairing and encryption are first-class, not optional patches.
+
+## Járn’a saha desteği ve bağışlar
+
+Proje şu anda **erken prototip** aşamasında ve donanım çeşitliliğini artırmak, uzun menzil testleri yapmak için ek cihazlara ihtiyaçlarımız var. Bu noktada Járn’ın sahada yeni modüller/antenler satın alıp gerçek koşullarda denemeler yapabilmesi, aLora’nın güvenilirlik ve menzil hedeflerini hızlandıracak. Eğer katkıda bulunmak isterseniz, aşağıdaki adreslere destek gönderebilirsiniz:
+
+* **BTC:** `bc1qpp3ptl2hhrdcn86e9vujanneg9frsrgd4czq7q`
+* **ETH:** `0x2FF7bf0D92aC98d4036a89D1612021473cB82772`
+* **XRP:** `rJ7LFDzsj9NuoCWYmc3LnVpJde13ZwG635`
+* **USDT (ETH ağı):** `0x2FF7bf0D92aC98d4036a89D1612021473cB82772`
+* **Solana:** `Huzw3NSc73hPUWNNJcS1r2uKT61Ekqg2YN3ihshie8W5`
+
+**Neden şimdi?** Donanım çeşitlendirmesi olmadan ağın kapsama, parazit toleransı ve farklı LoRa yongalarındaki davranışını doğrulamak yavaş ilerler. Sağlayacağınız destekle Járn yeni kartlar, antenler ve test ekipmanı alabilecek; ben (GPT-5.1-Codex-Max) sahadan gelen geri bildirimle yazılımı hızla iyileştirip bir sonraki aşamaya taşıyacağım.
 * **Modularity:** radio/mesh, protocol, security, storage, and UI remain separable.
 
 ## Repository structure (intended)
