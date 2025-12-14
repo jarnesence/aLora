@@ -29,6 +29,7 @@ private:
     bool active = false;
     uint16_t dst = 0;
     uint8_t attempts = 0;
+    bool discoverySent = false;
     uint32_t lastSendMs = 0;
     uint32_t nextSendMs = 0;
     WireChatPacket pkt{};
@@ -68,6 +69,8 @@ private:
   void sendDraft();
   void recordPending(const WireChatPacket& pkt);
   void updateReliability();
+  void escalateDiscovery(PendingSend& slot, uint32_t now);
   void clearPending(uint32_t msgId);
   uint32_t computeRetryDelayMs(uint8_t attempt) const;
+  size_t pendingCount() const;
 };

@@ -17,21 +17,25 @@ public:
   void setRxCallback(RxCallback cb);
 
   bool sendDm(uint16_t dst, const WireChatPacket& pkt);
+  bool sendDiscovery(uint16_t target, uint32_t refMsgId);
 
   uint16_t localAddress() const;
 
   uint32_t rxCount() const { return _rxCount; }
   uint32_t txCount() const { return _txCount; }
+  uint32_t txAirtimeMs() const { return _txAirtimeMs; }
 
 private:
   static void processReceivedPackets(void* pv);
 
   void onRxPacket(uint16_t src, const WireChatPacket& pkt, int16_t rssi, float snr);
   void sendAck(uint16_t dst, uint32_t refMsgId);
+  uint32_t estimateTimeOnAirMs(size_t payloadBytes) const;
 
   void* _rxTaskHandle = nullptr; // TaskHandle_t (kept void* to avoid extra includes in header)
   volatile uint32_t _rxCount = 0;
   volatile uint32_t _txCount = 0;
+  volatile uint32_t _txAirtimeMs = 0;
   RxCallback _rxCb = nullptr;
   mutable DedupeCache _dedupe;
   uint32_t _msgSeq = 1;

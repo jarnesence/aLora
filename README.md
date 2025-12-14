@@ -1,6 +1,6 @@
 # aLora — Private, Infrastructure-Independent Messaging over LoRa Mesh
 
-> **Status:** Early prototype, now with interactive compose/send, on-device deduplication, OLED bring-up hardening, jittered backoff on DM retries, failure indicators in chat, and duplicate ACK handling for better reliability. Core security work continues.
+> **Status:** Milestone 1 complete — DM retries are bounded with jitter, failed sends escalate to a controlled broadcast discovery probe, and the OLED status page now surfaces airtime/pending metrics for on-device health checks. Core security work continues.
 
 ## AI authoring note
 
@@ -115,6 +115,8 @@ This repository is in a **prototype stabilization phase**. Latest highlights:
 * Incoming packets are **deduplicated on-device** before reaching the UI/log.
 * One-hop delivery receipts are **acknowledged and reflected in the chat list** (checkmark when delivered), and outgoing DMs auto-retry with **bounded, jittered backoff**; exhausted retries now flag failed messages in the chat list.
 * Basic message persistence (chat tail/history concept).
+* **Reliability escalation** now performs a controlled broadcast discovery probe after failed unicasts, then resumes bounded retries.
+* The **Status page** surfaces TX/RX counters, accumulated airtime, and pending queue depth for on-device health checks.
 
 ## Known gaps / next steps
 
@@ -143,7 +145,7 @@ This keeps the firmware lightweight while remaining adaptable.
 
 ## Roadmap
 
-### Milestone 0 — Stabilize the baseline (in progress)
+### Milestone 0 — Stabilize the baseline (complete)
 
 **Goal:** a reliable build + working OLED UI on the reference device.
 
@@ -158,8 +160,8 @@ This keeps the firmware lightweight while remaining adaptable.
 
 * [x] Delivery receipts (ACK) with bounded retries.
 * [x] Retry policy (bounded, jittered backoff plus on-screen failure indication).
-* [ ] Failure escalation: broadcast discovery only when necessary.
-* [ ] Status page: airtime + health metrics.
+* [x] Failure escalation: broadcast discovery only when necessary.
+* [x] Status page: airtime + health metrics.
 
 ### Milestone 2 — Pairing + AES-256 E2E
 

@@ -3,7 +3,7 @@
 
 // Wire format for direct messages and delivery receipts.
 // Keep it small: large payloads increase airtime and collision probability.
-enum class PacketKind : uint8_t { Chat = 0, Ack = 1 };
+enum class PacketKind : uint8_t { Chat = 0, Ack = 1, Discovery = 2 };
 
 struct WireChatPacket {
   PacketKind kind;       // Chat or Ack
