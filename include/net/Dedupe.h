@@ -1,14 +1,22 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 
+// Simple fixed-size deduplication cache for (src,msgId).
+// No heap allocations; safe for small MCUs.
 class DedupeCache {
 public:
-  void clear();
+  static const size_t kMax = 64;
+
+  explicit DedupeCache(size_t capacity = kMax);
+
   bool seen(uint16_t src, uint32_t msgId) const;
   void remember(uint16_t src, uint32_t msgId);
 
 private:
-  struct Entry { uint16_t src=0; uint32_t msgId=0; };
-  Entry _e[24];
-  uint8_t _idx = 0;
+  struct Entry { uint16_t src; uint32_t msgId; };
+
+  size_t _cap;
+  size_t _idx;
+  Entry _e[kMax];
 };

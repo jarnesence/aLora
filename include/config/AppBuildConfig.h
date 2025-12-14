@@ -38,7 +38,7 @@
 #endif
 
 #ifndef APP_I2C_CLOCK_HZ
-  #define APP_I2C_CLOCK_HZ 400000
+  #define APP_I2C_CLOCK_HZ 100000
 #endif
 
 #ifndef APP_OLED_CTRL

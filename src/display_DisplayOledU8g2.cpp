@@ -27,8 +27,8 @@
 #endif
 
 // Two controller variants, selectable at runtime via APP_OLED_CTRL (and optionally auto)
-static U8G2_SSD1306_128X64_NONAME_F_HW_I2C g_u8g2_1306(APP_U8G2_ROT, APP_OLED_RESET, APP_I2C_SCL, APP_I2C_SDA);
-static U8G2_SSD1315_128X64_NONAME_F_HW_I2C g_u8g2_1315(APP_U8G2_ROT, APP_OLED_RESET, APP_I2C_SCL, APP_I2C_SDA);
+static U8G2_SSD1306_128X64_NONAME_F_HW_I2C g_u8g2_1306(APP_U8G2_ROT, APP_OLED_RESET);
+static U8G2_SSD1315_128X64_NONAME_F_HW_I2C g_u8g2_1315(APP_U8G2_ROT, APP_OLED_RESET);
 
 DisplayOledU8g2::DisplayOledU8g2() {}
 
@@ -62,7 +62,7 @@ U8G2* DisplayOledU8g2::selectController() {
 }
 
 void DisplayOledU8g2::hardResetIfPresent() {
-  if (APP_OLED_RESET == U8X8_PIN_NONE) return;
+  if ((int)APP_OLED_RESET < 0 || APP_OLED_RESET == U8X8_PIN_NONE) return;
 
   pinMode(APP_OLED_RESET, OUTPUT);
   digitalWrite(APP_OLED_RESET, HIGH);
@@ -88,10 +88,16 @@ bool DisplayOledU8g2::begin() {
   Wire.begin(APP_I2C_SDA, APP_I2C_SCL);
   Wire.setClock((uint32_t)APP_I2C_CLOCK_HZ);
 
+  Wire.setClock((uint32_t)APP_I2C_CLOCK_HZ);
+
   hardResetIfPresent();
+  delay(50);
+
 
   uint8_t addr7 = detectI2cAddress();
   _u8 = selectController();
+  if (_u8) _u8->setBusClock((uint32_t)APP_I2C_CLOCK_HZ);
+
 
   // U8g2 expects 8-bit address (7-bit << 1)
   _u8->setI2CAddress((uint8_t)(addr7 << 1));

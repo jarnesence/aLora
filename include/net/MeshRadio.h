@@ -1,9 +1,13 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
-#include "net/NetTypes.h"
+#include "net/Packets.h"
 
 // Thin wrapper around LoRaMesher.
+// Responsibilities:
+// - Configure LoRaMesher pins + radio parameters from AppBuildConfig.
+// - Provide a single RX callback delivering decoded WireChatPacket.
+// - Provide a DM send primitive (currently uses LoRaMesher reliable send).
 class MeshRadio {
 public:
   using RxCallback = void (*)(uint16_t src, const WireChatPacket& pkt, int16_t rssi, float snr);
@@ -17,10 +21,12 @@ public:
   uint32_t txCount() const { return _txCount; }
 
 private:
-  static void receiveTask(void* pv);
-  void processReceivedPackets();
+  static void processReceivedPackets(void* pv);
 
-  RxCallback _rxCb = nullptr;
+  void onRxPacket(uint16_t src, const WireChatPacket& pkt, int16_t rssi, float snr);
+
+  void* _rxTaskHandle = nullptr; // TaskHandle_t (kept void* to avoid extra includes in header)
   volatile uint32_t _rxCount = 0;
   volatile uint32_t _txCount = 0;
+  RxCallback _rxCb = nullptr;
 };
