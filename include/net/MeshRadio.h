@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
-#include "net/Packets.h"
+#include "net/NetTypes.h"
 
 // Thin wrapper around LoRaMesher.
 class MeshRadio {
@@ -17,6 +17,9 @@ public:
   uint32_t txCount() const { return _txCount; }
 
 private:
+  static void receiveTask(void* pv);
+  void processReceivedPackets();
+
   RxCallback _rxCb = nullptr;
   volatile uint32_t _rxCount = 0;
   volatile uint32_t _txCount = 0;

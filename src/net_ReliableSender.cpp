@@ -64,13 +64,7 @@ void ReliableSender::tick() {
       continue;
     }
 
-    // Wait for a route before spending retries (DM-first behavior)
-    if (_r && !_r->hasRoute(pm.dst)) {
-      pm.nextSendAtMs = now + 1000;
-      continue;
-    }
-
-    // Build packet
+    // Build packet for the next transmit attempt
     WireChatPacket pkt;
     pkt.type = (uint8_t)AppMsgType::ChatMsg;
     pkt.msgId = pm.msgId;
@@ -79,7 +73,7 @@ void ReliableSender::tick() {
     memcpy(pkt.text, pm.text, pkt.textLen);
     pkt.text[pkt.textLen] = 0;
 
-    _r->sendPacket(pm.dst, pkt);
+    _r->sendDm(pm.dst, pkt);
 
     // Log TX only on first attempt (avoids duplicate lines on retries)
     if (_log && pm.tries == 0) {
