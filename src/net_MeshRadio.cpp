@@ -42,6 +42,11 @@ void MeshRadio::processReceivedPackets(void* pv) {
 }
 
 void MeshRadio::onRxPacket(uint16_t src, const WireChatPacket& pkt, int16_t rssi, float snr) {
+  if (_dedupe.seen(src, pkt.msgId)) {
+    return;
+  }
+
+  _dedupe.remember(src, pkt.msgId);
   if (_rxCb) _rxCb(src, pkt, rssi, snr);
 }
 
@@ -120,8 +125,15 @@ bool MeshRadio::sendDm(uint16_t dst, const WireChatPacket& pkt) {
 
   // Avoid template instantiation with T=void by passing a typed pointer.
   WireChatPacket tmp = pkt;
+  tmp.to = dst;
+  if (tmp.msgId == 0) tmp.msgId = ++_msgSeq;
+  if (tmp.from == 0) tmp.from = localAddress();
   radio.sendReliable(dst, &tmp, 1);
 
   _txCount++;
   return true;
+}
+
+uint16_t MeshRadio::localAddress() const {
+  return LoraMesher::getInstance().getLocalAddress();
 }

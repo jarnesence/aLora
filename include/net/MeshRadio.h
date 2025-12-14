@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "net/Packets.h"
+#include "net/Dedupe.h"
 
 // Thin wrapper around LoRaMesher.
 // Responsibilities:
@@ -17,6 +18,8 @@ public:
 
   bool sendDm(uint16_t dst, const WireChatPacket& pkt);
 
+  uint16_t localAddress() const;
+
   uint32_t rxCount() const { return _rxCount; }
   uint32_t txCount() const { return _txCount; }
 
@@ -29,4 +32,6 @@ private:
   volatile uint32_t _rxCount = 0;
   volatile uint32_t _txCount = 0;
   RxCallback _rxCb = nullptr;
+  mutable DedupeCache _dedupe;
+  uint32_t _msgSeq = 1;
 };

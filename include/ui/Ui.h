@@ -18,6 +18,7 @@ public:
 
 private:
   enum class Screen : uint8_t { Chat=0, Compose=1, Status=2, Settings=3 };
+  enum class ComposeFocus : uint8_t { Destination=0, Cursor=1, Character=2, Send=3 };
 
   IDisplay* _d = nullptr;
   RotaryInput* _in = nullptr;
@@ -35,7 +36,8 @@ private:
   char _draft[25] = {0};
   uint8_t _cursor = 0;
   uint8_t _charIndex = 0;
-  uint8_t _focus = 0; // 0=dst, 1=text, 2=send
+  ComposeFocus _focus = ComposeFocus::Destination;
+  uint32_t _nextMsgId = 1;
 
   void drawChat();
   void drawCompose();
@@ -43,4 +45,11 @@ private:
   void drawSettings();
 
   void handleInput();
+  void handleClick();
+  void handleDelta(int32_t delta);
+  void handleComposeClick();
+  void handleComposeDelta(int32_t delta);
+  void advanceCursor(int32_t delta);
+  void syncCharIndexToDraft();
+  void sendDraft();
 };
