@@ -45,7 +45,7 @@ void MeshRadio::processReceivedPackets(void* pv) {
 
 void MeshRadio::onRxPacket(uint16_t src, const WireChatPacket& pkt, int16_t rssi, float snr) {
   if (_dedupe.seen(src, pkt.msgId)) {
-    if (pkt.kind == PacketKind::Chat) {
+    if (pkt.kind == PacketKind::Chat || pkt.kind == PacketKind::SecureChat) {
       sendAck(src, pkt.msgId);
     }
     return;

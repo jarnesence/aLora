@@ -88,8 +88,6 @@ bool DisplayOledU8g2::begin() {
   Wire.begin(APP_I2C_SDA, APP_I2C_SCL);
   Wire.setClock((uint32_t)APP_I2C_CLOCK_HZ);
 
-  Wire.setClock((uint32_t)APP_I2C_CLOCK_HZ);
-
   hardResetIfPresent();
   delay(50);
 
