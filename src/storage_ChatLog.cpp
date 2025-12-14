@@ -7,6 +7,7 @@ void ChatLog::add(uint16_t src, bool outgoing, uint32_t msgId, const char* text,
   m.src = src;
   m.outgoing = outgoing;
   m.delivered = !outgoing;  // inbound is implicitly delivered
+  m.failed = false;
   m.msgId = msgId;
   std::strncpy(m.text, text ? text : "", sizeof(m.text)-1);
   m.text[sizeof(m.text)-1] = '\0';
@@ -30,6 +31,21 @@ bool ChatLog::markDelivered(uint32_t msgId) {
     if (!m.outgoing) continue;
     if (m.msgId != msgId) continue;
     m.delivered = true;
+    m.failed = false;
+    return true;
+  }
+  return false;
+}
+
+bool ChatLog::markFailed(uint32_t msgId) {
+  size_t start = (_head + MAX - _count) % MAX;
+  for (size_t i = 0; i < _count; i++) {
+    size_t pos = (start + i) % MAX;
+    ChatMsg& m = _buf[pos];
+    if (!m.outgoing) continue;
+    if (m.msgId != msgId) continue;
+    m.failed = true;
+    m.delivered = false;
     return true;
   }
   return false;
