@@ -13,6 +13,7 @@ bool DedupeCache::seen(uint16_t src, uint32_t msgId) const {
 }
 
 void DedupeCache::remember(uint16_t src, uint32_t msgId) {
-  _e[_idx] = {src, msgId};
+  _e[_idx].src = src;
+  _e[_idx].msgId = msgId;
   _idx = (uint8_t)((_idx + 1) % (sizeof(_e)/sizeof(_e[0])));
 }
