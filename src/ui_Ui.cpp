@@ -242,9 +242,9 @@ void Ui::syncCharIndexToDraft() {
 void Ui::applyShortcut() {
   if (kShortcutCount == 0) return;
   const char* phrase = kShortcuts[_shortcutIdx % kShortcutCount];
-  size_t phraseLen = std::strnlen(phrase, sizeof(_draft));
+  size_t phraseLen = ::strnlen(phrase, sizeof(_draft));
   size_t room = sizeof(_draft) - 1;
-  size_t curLen = std::strnlen(_draft, room);
+  size_t curLen = ::strnlen(_draft, room);
   if (_cursor > curLen) _cursor = (uint8_t)curLen;
   if (phraseLen > room - _cursor) phraseLen = room - _cursor;
 
@@ -297,7 +297,7 @@ void Ui::sendDraft() {
   pkt.ts = (uint32_t)(millis() / 1000);
   pkt.refMsgId = 0;
   pkt.nonce = 0;
-  pkt.textLen = (uint16_t)std::strnlen(_draft, sizeof(pkt.text));
+  pkt.textLen = (uint16_t)::strnlen(_draft, sizeof(pkt.text));
   pkt.reserved = 0;
   std::strncpy(pkt.text, _draft, sizeof(pkt.text) - 1);
   pkt.text[sizeof(pkt.text) - 1] = '\0';
@@ -336,7 +336,7 @@ void Ui::sendSecureDraft() {
   pkt.nonce = nextNonce();
   pkt.reserved = 0;
 
-  size_t plainLen = std::strnlen(_draft, sizeof(pkt.text));
+  size_t plainLen = ::strnlen(_draft, sizeof(pkt.text));
   if (plainLen > sizeof(pkt.text)) plainLen = sizeof(pkt.text);
   pkt.textLen = (uint16_t)plainLen;
 
@@ -415,7 +415,7 @@ void Ui::maybeBroadcastPresence(uint32_t now) {
   pkt.refMsgId = 0;
   pkt.nonce = nextNonce();
   std::strncpy(pkt.text, "aLora presence", sizeof(pkt.text) - 1);
-  pkt.textLen = (uint16_t)std::strnlen(pkt.text, sizeof(pkt.text));
+  pkt.textLen = (uint16_t)::strnlen(pkt.text, sizeof(pkt.text));
   pkt.reserved = 0;
 
   _radio->sendDm(pkt.to, pkt);
