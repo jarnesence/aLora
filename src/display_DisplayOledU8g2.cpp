@@ -107,7 +107,7 @@ bool DisplayOledU8g2::begin() {
                 (int)APP_OLED_CTRL, addr7, (int)APP_I2C_SDA, (int)APP_I2C_SCL, (int)APP_OLED_RESET,
                 (int)APP_OLED_ROT, (unsigned long)APP_I2C_CLOCK_HZ);
 
-  drawBootBanner("LoRaDM boot...", "OLED init...");
+  drawBootBanner("aLora boot...", "OLED init...");
 
   _u8->begin();
   _u8->setPowerSave(0);
@@ -116,7 +116,7 @@ bool DisplayOledU8g2::begin() {
   _u8->clearBuffer();
   _u8->setFont(u8g2_font_6x12_tr);
   _u8->drawFrame(0, 0, _u8->getDisplayWidth(), _u8->getDisplayHeight());
-  _u8->drawStr(2, 14, "LoRaDM OLED OK");
+  _u8->drawStr(2, 14, "aLora OLED OK");
   char buf[48];
   snprintf(buf, sizeof(buf), "I2C 0x%02X ctrl %d", addr7, (int)APP_OLED_CTRL);
   _u8->drawStr(2, 30, buf);

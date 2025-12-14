@@ -35,7 +35,7 @@ void setup() {
   Serial.begin(APP_LOG_BAUD);
   delay(200);
   Serial.println();
-  Serial.println("LoRaDM starting...");
+  Serial.println("aLora starting...");
 
 #if defined(APP_DISPLAY_OLED) || defined(APP_DISPLAY_TFT)
   g_display.begin();
@@ -52,7 +52,7 @@ void setup() {
 
 #if defined(APP_DISPLAY_OLED)
   // Add a local boot message to chat log to confirm UI is alive.
-  g_log.add(0, true, "BOOT OK", (uint32_t)(millis()/1000));
+  g_log.add(0, true, "aLora boot", (uint32_t)(millis()/1000));
 #endif
 }
 

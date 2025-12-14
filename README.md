@@ -1,20 +1,22 @@
-# LoRaDM — Private, Infrastructure-Independent Messaging over LoRa Mesh
+# aLora — Private, Infrastructure-Independent Messaging over LoRa Mesh
 
-> **Status:** Early prototype (pre-alpha). Core scaffolding is in place; reliability, pairing, and end-to-end encryption are under active development.
+> **Status:** Early prototype, now with interactive compose/send, on-device deduplication, and OLED bring-up hardening. Core reliability and security work continues.
+
+## Yapay zeka notu
+
+Bu proje, OpenAI tarafından geliştirilen **GPT-5.1-Codex-Max** (ben) tarafından, **Járn**'ın doğrudan kontrolü ve tasarım kararlarıyla yürütülmektedir. Kod, mimari kararlar ve ilerleme raporları yapay zeka tarafından üretilmekte; Járn nihai onay ve yönlendirmeyi sağlamaktadır.
 
 ## Why this project exists
 
 Modern messengers assume **GSM**, **internet**, or **satellite** connectivity and centralized infrastructure. In many real-world scenarios—remote travel, disasters, outages, censorship, or simply “no coverage”—those assumptions fail.
 
-**LoRaDM** is a firmware project that aims to deliver **device-to-device messaging (and later voice memos)** over a **LoRa mesh** with:
+**aLora** is a firmware project that delivers **device-to-device messaging (and later voice memos)** over a **LoRa mesh** with:
 
 * **Zero dependency** on GSM/internet/satellite.
 * **DM-first** user experience (direct, private conversations).
 * **Deterministic mesh behavior** (no broadcast storms, no duplicate re-forward loops).
 * **End-to-end privacy** via **AES-256** after an explicit peer approval flow.
 * **A modern, minimalist UI** suitable for small handheld devices (portrait OLED today; TFT later).
-
-The intended outcome is an open, community-driven firmware that can be embedded into DIY devices and shipped by different builders/manufacturers, while still participating in the same mesh forwarding fabric.
 
 ## Project goals
 
@@ -47,12 +49,12 @@ The intended outcome is an open, community-driven firmware that can be embedded 
 
 ## High-level design
 
-LoRaDM is built as layered subsystems so the radio/mesh layer, application protocol, security, storage, and UI can evolve independently.
+aLora is built as layered subsystems so the radio/mesh layer, application protocol, security, storage, and UI can evolve independently.
 
 ### 1) Mesh foundation
 
 * **LoRaMesher** provides the underlying mesh transport and forwarding mechanics.
-* LoRaDM uses DM-oriented patterns on top:
+* aLora uses DM-oriented patterns on top:
 
   * Prefer route-aware unicast.
   * Controlled discovery only when needed.
@@ -103,31 +105,28 @@ The UI is intentionally small:
 
 Input is primarily via **rotary encoder**, optimized for fast text composition.
 
-## Current implementation status (what exists today)
+## Current implementation status
 
-This repository is currently in a **prototype stabilization phase**.
+This repository is in a **prototype stabilization phase**. Latest highlights:
 
-### Implemented / in progress
-
-* Project scaffolding with modular subsystems (radio, UI, settings, storage).
-* Portrait OLED UI skeleton (menus/pages, rendering abstraction).
-* Rotary input driver integration.
+* OLED bring-up hardened (auto I2C address detection, controller selection, boot diagnostics).
+* Rotary input integrated for menu navigation and text editing.
+* Compose view can now **set destination, move the cursor, edit characters, and send** DMs directly over the mesh.
+* Incoming packets are **deduplicated on-device** before reaching the UI/log.
 * Basic message persistence (chat tail/history concept).
 
-### Known gaps / work required
+## Known gaps / next steps
 
-* **OLED bring-up stabilization:** SSD1315/SSD1306 selection, I2C address detection, reset/rotation edge cases.
-* **LoRaMesher API compatibility:** upstream versions differ; a compatibility layer is needed to avoid breakages.
 * **Reliable delivery + receipts:** strict double-tick semantics, retry logic, and failure escalation.
 * **Pairing protocol:** advertisement, request/accept UX, and secure key establishment.
 * **AES-256 E2E:** encryption of DM payloads, key storage, replay protection.
 * **Routing-aware behavior:** track successful paths and prefer them; fall back to controlled discovery.
 * **Airtime discipline:** accurate time-on-air estimates, rate limiting, jitter/backoff.
-* **Interoperability contract:** stable on-air format so different devices/brands running LoRaDM can relay consistently.
+* **Interoperability contract:** stable on-air format so different devices/brands running aLora can relay consistently.
 
 ## Configuration philosophy
 
-LoRaDM is designed to be configured from PlatformIO without hardcoding “device combos” into the codebase.
+aLora is designed to be configured from PlatformIO without hardcoding “device combos” into the codebase.
 
 * **Environment selects the MCU family** (e.g., ESP32-S3 vs ESP32-C3).
 * **Build flags select features**:
@@ -143,14 +142,14 @@ This keeps the firmware lightweight while remaining adaptable.
 
 ## Roadmap
 
-### Milestone 0 — Stabilize the baseline (now)
+### Milestone 0 — Stabilize the baseline (in progress)
 
 **Goal:** a reliable build + working OLED UI on the reference device.
 
-* [ ] Solid OLED bring-up for **SSD1315** and **SSD1306** (auto address + reset + rotation).
-* [ ] Lock down LoRaMesher versioning + compatibility wrapper.
-* [ ] Deterministic dedupe (no re-forward of identical packets).
-* [ ] Basic DM text send/receive across 2–3 nodes.
+* [x] Solid OLED bring-up for **SSD1315** and **SSD1306** (auto address + reset + rotation).
+* [x] Lock down LoRaMesher versioning + compatibility wrapper.
+* [x] Deterministic dedupe (no re-forward of identical packets).
+* [x] Basic DM text send/receive across 2–3 nodes.
 
 ### Milestone 1 — DM reliability (double-tick)
 
