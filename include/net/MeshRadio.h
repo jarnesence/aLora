@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
-#include "net/Packets.h"
+#include "net/NetTypes.h"
 
 // Thin wrapper around LoRaMesher.
 class MeshRadio {
