@@ -10,6 +10,7 @@ Display_SSD1306::~Display_SSD1306() {
 }
 
 void Display_SSD1306::init() {
+    Serial.printf("Initializing Display: SDA=%d, SCL=%d\n", sda_pin, scl_pin);
     Wire.begin(sda_pin, scl_pin);
 
     // Auto-detect I2C address
@@ -40,12 +41,13 @@ void Display_SSD1306::init() {
     }
 
     if (!deviceFound) {
-        Serial.println("Error: No I2C device found at 0x3C or 0x3D");
+        Serial.println("Error: No I2C device found at 0x3C or 0x3D. Check wiring.");
     }
 
     // Try to initialize with the determined address
+    // SSD1306_SWITCHCAPVCC generates display voltage from 3.3V internally
     if (!oled->begin(SSD1306_SWITCHCAPVCC, foundAddress)) {
-        Serial.println(F("SSD1306 allocation failed"));
+        Serial.printf("SSD1306 allocation failed for address 0x%02X\n", foundAddress);
     } else {
         Serial.println(F("SSD1306 initialized successfully"));
     }

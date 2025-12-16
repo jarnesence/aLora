@@ -35,9 +35,24 @@ void MeshManager::init(const char* name) {
     CryptoManager::generateKeyPair(localPublicKey, localPrivateKey);
 
     // Initialize SPI explicitly with configured pins
+    // Important: Call this BEFORE radio.begin()
     SPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_CS);
 
+    // Manual reset of LoRa module to ensure it's in a known state
+    pinMode(PIN_LORA_RST, OUTPUT);
+    digitalWrite(PIN_LORA_RST, LOW);
+    delay(10);
+    digitalWrite(PIN_LORA_RST, HIGH);
+    delay(10);
+
+    // Note: LoRaMesher::begin() creates a default LoraMesherConfig.
+    // If the library relies on LORA_CS etc macros, they must match.
+    // We rely on platformio.ini build flags for LoRaMesher configuration.
+
+    // Attempt to initialize radio
     radio.begin();
+
+    // If begin() doesn't start receiving (it usually does), we ensure start() is called.
     radio.start();
 
     TaskHandle_t receiveLoRaMessage_Handle = NULL;
@@ -52,6 +67,7 @@ void MeshManager::init(const char* name) {
     radio.setReceiveAppDataTaskHandle(receiveLoRaMessage_Handle);
 
     localId = radio.getLocalAddress();
+    Serial.printf("LoRa Initialized. Local ID: 0x%04X\n", localId);
 }
 
 void MeshManager::update() {

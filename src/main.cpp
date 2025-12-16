@@ -58,17 +58,32 @@ void onPairingRequest(uint16_t from) {
 
 void setup() {
     Serial.begin(115200);
+    delay(2000); // Wait for Serial to stabilize
+    Serial.println("Starting SecureLoRaMesh...");
+
+    // UI Init (Display first to show status)
+    Serial.println("Initializing UI...");
+    uiManager.init();
+    display.clear();
+    display.setCursor(0, 0);
+    display.print("Init LoRa...");
+    display.display();
 
     // Mesh Init
+    Serial.println("Initializing Mesh...");
     meshManager.setOnMessageReceived(onMeshMessage);
     meshManager.setOnPairingRequest(onPairingRequest);
     meshManager.init("User1");
 
-    // UI Init
-    uiManager.init();
-
     // BLE Init
+    Serial.println("Initializing BLE...");
     setupBLE();
+
+    Serial.println("Setup Complete.");
+    display.clear();
+    display.setCursor(0, 0);
+    display.print("Ready: User1");
+    display.display();
 }
 
 void loop() {
@@ -81,8 +96,6 @@ void loop() {
         std::string value = pCharacteristic->getValue();
         if (value.length() > 0) {
              // Handle BLE input to mesh if needed
-             // For example: "SEND:ID:MESSAGE"
-             // Not fully specified, but structure allows it.
         }
 
         display.clear();
