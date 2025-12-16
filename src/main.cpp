@@ -32,7 +32,7 @@ void setupBLE() {
     pServer->setCallbacks(new ServerCallbacks());
 
     NimBLEService* pService = pServer->createService("ABCD"); // Example UUID
-    pCharacteristic = pService->createCharacteristic("1234", NIMBLE_PROPERTY_READ | NIMBLE_PROPERTY_WRITE | NIMBLE_PROPERTY_NOTIFY);
+    pCharacteristic = pService->createCharacteristic("1234", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY);
 
     pService->start();
     NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();

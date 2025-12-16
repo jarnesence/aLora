@@ -70,7 +70,7 @@ void UIManager::drawPeerList() {
             } else {
                 display->setTextColor(1, 0);
             }
-            MeshManager::MeshPeer p;
+            MeshPeer p;
             if (mesh->getPeer(i, &p)) {
                 display->print(p.name);
                 if (p.status == PEER_PAIRED) display->print(" [P]");
@@ -90,7 +90,7 @@ void UIManager::handleInputPeerList(InputEvent e) {
         if (selectedPeerIndex < 0) selectedPeerIndex = count - 1;
     } else if (e == EVENT_SELECT) {
         if (count > 0) {
-            MeshManager::MeshPeer p;
+            MeshPeer p;
             if (mesh->getPeer(selectedPeerIndex, &p)) {
                 if (p.status == PEER_PAIRED) {
                     currentChatPeerId = p.id;
@@ -114,7 +114,8 @@ void UIManager::drawChat() {
     display->setTextSize(1);
     display->setTextColor(1);
     display->print("Chat: ");
-    display->println(currentChatPeerId);
+    display->print((int)currentChatPeerId);
+    display->println("");
 
     // Draw history
     for (int i = 0; i < chatHistoryCount; i++) {
@@ -209,7 +210,8 @@ void UIManager::drawPairingRequest() {
     display->setTextColor(1);
     display->println("Pairing Request!");
     display->print("From: ");
-    display->println(pairingRequestId);
+    display->print((int)pairingRequestId);
+    display->println("");
     display->println("Accept?");
     display->println("[Click] Yes");
     display->println("[Long] Ignore");

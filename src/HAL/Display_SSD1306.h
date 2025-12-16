@@ -8,7 +8,7 @@
 
 class Display_SSD1306 : public DisplayDriver {
 private:
-    Adafruit_SSD1306* display;
+    Adafruit_SSD1306* oled;
     int width;
     int height;
     int sda_pin;

@@ -47,9 +47,9 @@ void MeshManager::update() {
 }
 
 void MeshManager::processPacket(AppPacket<uint8_t>* packet) {
-    if (packet->getPayloadLength() < sizeof(PacketHeader)) return;
+    if (packet->getPayloadLength() < sizeof(MeshPacketHeader)) return;
 
-    PacketHeader* header = (PacketHeader*)packet->payload;
+    MeshPacketHeader* header = (MeshPacketHeader*)packet->payload;
     uint16_t from = packet->src;
 
     switch (header->type) {
@@ -209,10 +209,7 @@ void MeshManager::handleMessage(uint16_t from, MessagePacket* p) {
     bool found = false;
 
     xSemaphoreTake(peerMutex, portMAX_DELAY);
-    MeshPeer* peer = findPeer(peerId); // Wait, peerId is undefined here. Should be `from`
-    // Wait, argument is `from`.
-    // I need to search `from`.
-    peer = findPeer(from);
+    MeshPeer* peer = findPeer(from);
 
     if (peer && peer->status == PEER_PAIRED) {
         memcpy(secret, peer->sharedSecret, 32);

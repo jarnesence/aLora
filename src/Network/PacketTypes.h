@@ -12,23 +12,23 @@ enum PacketType : uint8_t {
 
 #pragma pack(push, 1)
 
-struct PacketHeader {
+struct MeshPacketHeader {
     uint8_t type;
     uint16_t senderId; // Derived from LoRa address or unique ID
 };
 
 struct BeaconPacket {
-    PacketHeader header;
+    MeshPacketHeader header;
     char name[10]; // Short username
 };
 
 struct HandshakePacket {
-    PacketHeader header;
+    MeshPacketHeader header;
     uint8_t publicKey[64]; // ECDH Public Key (example size, usually 64 bytes for secp256r1 uncompressed)
 };
 
 struct MessagePacket {
-    PacketHeader header;
+    MeshPacketHeader header;
     uint8_t iv[16]; // AES IV
     uint16_t payloadLength;
     uint8_t encryptedPayload[200]; // Max payload size

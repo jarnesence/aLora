@@ -54,7 +54,7 @@ void CryptoManager::encrypt(const uint8_t* plainText, size_t length, const uint8
 
     // Using a simpler interface if available or just raw calls.
     // Let's assume standard usage:
-    aesLib.encrypt(output, paddedLen, (char*)output, (byte*)key, 256, localIV);
+    aesLib.encrypt((byte*)output, paddedLen, (byte*)output, (byte*)key, 256, localIV);
     outLen = paddedLen;
 }
 
@@ -67,7 +67,7 @@ void CryptoManager::decrypt(const uint8_t* cipherText, size_t length, const uint
     // Copy cipherText to output as working buffer
     memcpy(output, cipherText, length);
 
-    aesLib.decrypt(output, length, (char*)output, (byte*)key, 256, localIV);
+    aesLib.decrypt((byte*)output, length, (byte*)output, (byte*)key, 256, localIV);
     outLen = length; // Unpadding needed logically, but for now return full block
 }
 
