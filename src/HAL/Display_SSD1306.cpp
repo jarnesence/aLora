@@ -11,10 +11,45 @@ Display_SSD1306::~Display_SSD1306() {
 
 void Display_SSD1306::init() {
     Wire.begin(sda_pin, scl_pin);
-    if (!oled->begin(SSD1306_SWITCHCAPVCC, address)) {
-        // Handle error, maybe serial print?
-        // Serial.println(F("SSD1306 allocation failed"));
+
+    // Auto-detect I2C address
+    uint8_t foundAddress = address; // Start with configured address
+    bool deviceFound = false;
+
+    Serial.println("Scanning I2C bus for OLED...");
+
+    // First check the configured address
+    Wire.beginTransmission(address);
+    if (Wire.endTransmission() == 0) {
+        Serial.printf("OLED found at configured address: 0x%02X\n", address);
+        deviceFound = true;
+    } else {
+        // Scan common OLED addresses
+        uint8_t scanAddrs[] = {0x3C, 0x3D};
+        for (uint8_t addr : scanAddrs) {
+            if (addr == address) continue; // Already checked
+
+            Wire.beginTransmission(addr);
+            if (Wire.endTransmission() == 0) {
+                Serial.printf("OLED found at alternative address: 0x%02X\n", addr);
+                foundAddress = addr;
+                deviceFound = true;
+                break;
+            }
+        }
     }
+
+    if (!deviceFound) {
+        Serial.println("Error: No I2C device found at 0x3C or 0x3D");
+    }
+
+    // Try to initialize with the determined address
+    if (!oled->begin(SSD1306_SWITCHCAPVCC, foundAddress)) {
+        Serial.println(F("SSD1306 allocation failed"));
+    } else {
+        Serial.println(F("SSD1306 initialized successfully"));
+    }
+
     oled->clearDisplay();
     oled->display();
 }

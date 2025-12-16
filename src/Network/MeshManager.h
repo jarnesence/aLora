@@ -2,7 +2,7 @@
 #define MESH_MANAGER_H
 
 #include <Arduino.h>
-#include <LoRaMesher.h>
+#include <LoraMesher.h>
 #include <freertos/semphr.h>
 #include "PacketTypes.h"
 #include "../Security/CryptoManager.h"
