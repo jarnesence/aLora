@@ -36,14 +36,16 @@ void MeshManager::init(const char* name) {
 
     // Initialize SPI explicitly with configured pins
     // Important: Call this BEFORE radio.begin()
-    SPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_CS);
+    // We do NOT pass the CS pin to SPI.begin() to avoid the SPI driver from claiming it.
+    // RadioLib will handle the CS pin control.
+    SPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI);
 
     // Manual reset of LoRa module to ensure it's in a known state
     pinMode(PIN_LORA_RST, OUTPUT);
     digitalWrite(PIN_LORA_RST, LOW);
-    delay(10);
+    delay(100);
     digitalWrite(PIN_LORA_RST, HIGH);
-    delay(10);
+    delay(100);
 
     // Note: LoRaMesher::begin() creates a default LoraMesherConfig.
     // If the library relies on LORA_CS etc macros, they must match.
