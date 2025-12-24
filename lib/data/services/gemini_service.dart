@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/heptapod_spectrum.dart';
+import '../models/spectrum_summary.dart';
 
 class GeminiService {
   final GenerativeModel _model;
@@ -39,6 +40,32 @@ Return ONLY JSON:
     }
 
     return parseSpectrumJson(response.text!);
+  }
+
+  Future<String> spectrumToPhilosophy(SpectrumSummary summary) async {
+    final systemPrompt = '''
+I am sending you data extracted from a Heptapod Logogram.
+* **Dominant Frequencies:** ${summary.dominantFrequencies} (Shape complexity).
+* **Chaos Level (0-1):** ${summary.chaosLevel} (0 = Smooth/Peaceful, 1 = Jagged/Violent/Confused).
+* **Ink Density:** ${summary.density} (Heaviness of the concept).
+
+**Task:** Interpret the philosophical meaning.
+* If Chaos is high, describe inner conflict, entropy, or energy.
+* If Chaos is low, describe harmony, silence, or flow.
+* If Density is high, describe heavy, grounding concepts (Time, Gravity, Death).
+* If Density is low, describe ethereal concepts (Dream, Ghost, Whisper).
+
+Output: A poetic, timeless interpretation in Turkish. Do not mention the numbers.
+''';
+
+    final content = [Content.text(systemPrompt)];
+    final response = await _model.generateContent(content);
+
+    if (response.text == null) {
+      throw Exception('Gemini returned empty response for philosophy');
+    }
+
+    return response.text!;
   }
 
   HeptapodSpectrum parseSpectrumJson(String jsonStr) {
