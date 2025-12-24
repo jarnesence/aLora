@@ -9,7 +9,7 @@ import '../data/models/spectrum_summary.dart';
 // Note: In a real app, API Key should be secured.
 // Ideally passed via environment variable or user input.
 // For now we will use a placeholder or expect it to be set.
-final geminiApiKeyProvider = Provider<String>((ref) => 'TODO_API_KEY');
+final geminiApiKeyProvider = Provider<String>((ref) => 'AIzaSyAONEDj8aPeU4P7C1nm7HcVV8Xob1oAZD4');
 
 final geminiServiceProvider = Provider<GeminiService>((ref) {
   final apiKey = ref.watch(geminiApiKeyProvider);
